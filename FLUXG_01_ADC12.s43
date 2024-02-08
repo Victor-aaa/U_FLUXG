@@ -1,0 +1,375 @@
+//******************************************************************************
+m_ScopeSinhro	MACRO
+#ifdef  __DEBUG_MODE__
+		bis.b	#SiNC_B
+		nop
+		nop
+		nop
+		bic.b	#SiNC_B
+#endif		
+		ENDM
+m_ScopeSet	MACRO
+#ifdef  __DEBUG_MODE__
+		bis.b	#SiNC_B
+#endif		
+		ENDM
+m_ScopeClr	MACRO
+#ifdef  __DEBUG_MODE__
+		bic.b	#SiNC_B
+#endif		
+		ENDM
+//==============================================================================
+//           ***** Init DMA *****
+InitDMA
+	//	mov	#ENNMI, &DMACTL4	// NMI stop DMA DMA1TSEL__TA4CCR0 
+		clr	&DMA0CTL
+		clr	&DMA1CTL
+		clr	&DMA2CTL
+		
+    			mov   	#2, R13			// delay 20 [mS] for power meassure
+        		call    #McuWait_mS		// delay N=R13 [mS] 
+InitDMA0                                               		// DMA Ch0
+	/*	mov	#DMA0TSEL__TA4CCR0|DMA1TSEL__TA4CCR0, &DMACTL0   //  DMA1TSEL__TB0CCR0      
+		mov	#, &DMA0SA_        		
+ 		mov	#, &DMA0DA_
+ 		mov	#, &DMA0SZ			// Size
+		mov	#DMADT_0+DMASRCINCR_3, &DMA0CTL
+InitDMA1                                                	// DMA Ch1
+		mov	#, &DMA1SA_  			// берет с канала Ch0 !!!        		
+ 		mov	#, &DMA1DA_
+ 		mov	#, &DMA1SZ
+		mov	#DMADT_5+DMASRCINCR_3+DMADSTINCR_2, &DMA1CTL
+InitDMA2                                               		// DMA Ch2
+		mov	#DMA2TSEL__TA1CCR0|DMA3TSEL__ADC12IFG, &DMACTL1
+		mov	#, &DMA2SA_        		
+ 		mov	#, &DMA2DA_		//  TA4CCTL0
+ 		mov	#1, &DMA2SZ				// size 2 word
+		mov	#DMADT_0+DMASRCINCR_3, &DMA2CTL
+		
+*/			
+		ret
+//-------------------------------------------------------------------------------
+//Interrupt handler for DMA0IFG, DMA1IFG, DMA2IFG
+//-------------------------------------------------------------------------------
+DMA0_HND
+		RETI
+//-------------------------------------------------------
+DMA_VEC   
+		ADD &DMAIV,PC 		; Add offset to Jump table 3
+		RETI 			; Vector  0: No interrupt 5
+		JMP DMA0_HND 		; Vector  2: DMA channel 0 2
+		RETI 			; Vector  4: DMA channel 1 2
+		RETI 			; Vector  6: DMA channel 2 2
+//==============================================================================
+//==============================================================================
+//==============================================================================
+//==============================================================================
+//           ***** Init Timer A1 *****
+//==============================================================================
+InitTimerA1:	// F=1000kHz, timer 32bit...  	
+		clr	&TA1R_EXT					// ext. cnt. TA1
+	    	mov   	#TAIDEX_3, &TA1EX0   				// TAIDEX_3 = /4
+
+	//	mov	#CCIE, &TA1CCTL2
+#if SMCLK_f = 16000000
+	    	mov   	#TASSEL_2|MC_2|ID__4|TAIE|TACLR, &TA1CTL  	// SMCLK  Cont mode /16
+dTuS  = 1
+#endif
+#if SMCLK_f = 8000000
+	    	mov   	#TASSEL_2|MC_2|ID__2|TAIE|TACLR, &TA1CTL  	// SMCLK  Cont mode /8
+dTuS  = 1
+#endif
+		ret
+//==============================================================================
+// Interrupt handler for TAIFG, TACCR1 and TACCR2 CCIFG.
+//==============================================================================
+TIMER1_A0_VEC	// F=1000kHz, timer 32bit...
+		// start Transmitt Pack!!!
+		RETI
+//======================
+TIMER1_A1_VEC      ; Interrupt latency 6
+		ADD 	&TA1IV,PC 	; Add offset to Jump table 3
+		RETI 			; Vector 0: No interrupt 5
+		JMP 	CCIFG_1_HND 	; Vector 2: TA1CCR1 2
+		JMP 	CCIFG_2_HND	; Vector 4: TA1CCR2 2
+		RETI 			; Vector 6: TA1CCR3 2
+		RETI 			; Vector 8: TA1CCR4 2
+		RETI 			; Vector 10: TA1CCR5 2
+		RETI 			; Vector 12: TA1CCR6 2
+TA1IFG_HND 				; Vector 14: TA1IFG Flag
+		inc	&TA1R_EXT	// ext. cnt. TA1 перенести в A0_VEC !!!
+		RETI
+//======================
+CCIFG_1_HND					// -- PreTransmit -- upper 160uS
+		cmp	&TA1CCR1_EXT, &TA1R_EXT  // дырка...!!!!
+		jlo	_nxt_st_TR
+		bis.b	#LED_GREEN_B
+_nxt_st_TR	RETI
+//======================
+CCIFG_2_HND	
+		RETI
+//==============================================================================
+//           ***** Init Timer B0 *****
+//==============================================================================
+InitTimerB0:	// CAPTURE
+
+
+		ret
+//==============================================================================
+TIMER0_B0_VEC
+		RETI
+//==============		
+TIMER0_B1_VEC   			; Interrupt latency 6
+		ADD &TB0IV,PC 		; Add offset to Jump table 3
+		RETI 			; Vector 0: No interrupt 5
+		JMP TB0IFG_1_HND 	; Vector 2: TB0CCR1 2
+		JMP TB0IFG_2_HND 	; Vector 4: TB0CCR2 2
+		JMP TB0IFG_3_HND 	; Vector 6: TB0CCR3 2
+		JMP TB0IFG_4_HND 	; Vector 8: TB0CCR4 2
+		JMP TB0IFG_5_HND 	; Vector 10: TB0CCR5 2
+		JMP TB0IFG_6_HND 	; Vector 12: TB0CCR6 2
+TB0IFG_HND 				; Vector 14: TB0IFG Flag
+		RETI
+TB0IFG_6_HND 			; Vector 12: TB0CCR6
+		RETI 		
+TB0IFG_5_HND 			; Vector 10: TB0CCR5
+		RETI 		
+TB0IFG_4_HND 			; Vector 8: TB0CCR4
+		RETI 		
+TB0IFG_3_HND 			; Vector 6: TB0CCR3
+		RETI 		
+TB0IFG_2_HND 			; Vector 4: TB0CCR2
+		RETI 		
+TB0IFG_1_HND 			; Vector 2: TB0CCR1
+		RETI 			
+//==============================================================================
+;-------------------------------------------------------------------------------
+;           ***** Init ADC12 *****
+;-------------------------------------------------------------------------------
+InitADC12
+		call	#StopADC12
+_ref_buzy		
+		bit	#REFGENBUSY, &REFCTL0
+		jnz	_ref_buzy
+		mov	#REFVSEL_2|REFON, &REFCTL0		// ref ON!  2.5V  |REFOUT - EXT Only!!!
+		
+       //         bis.b	#ANVEX|ANVIN|ANX|ANY, &P3SELC      		// P3 analog pin select
+		clr	&ADC12CTL0
+            	mov   #ADC12INCH_12|ADC12VRSEL_1, &ADC12MCTL0      	// A12 APOW goes to MEM0
+            	mov   #ADC12INCH_13|ADC12VRSEL_1, &ADC12MCTL1      	// A13 ASENS goes to MEM1
+            	mov   #ADC12INCH_14|ADC12VRSEL_1, &ADC12MCTL2      	// A14 AN1 goes to MEM2
+            	mov   #ADC12INCH_15|ADC12VRSEL_1|ADC12EOS, &ADC12MCTL3  // A15 AN2 goes to MEM3  , end of sequence
+		 
+StartADC12_All:	
+		bic	#ADC12ENC|ADC12ON, &ADC12CTL0 		// correct Stop ADC!!!
+		clr	&ADC12IV				// reset int vector
+		mov     #ADC12SHT0_2|ADC12MSC, &ADC12CTL0	// ADC12MSC!
+            	mov     #ADC12SHP|ADC12SSEL_1|ADC12DIV_0|ADC12CONSEQ_3, &ADC12CTL1 // 32768/(16+14+1)/4ch  = 264 Hz
+            	mov   	#ADC12RES__12BIT|ADC12PWRMD, &ADC12CTL2	 	//  12bit (14 clock cycle conversion time +1)
+            	mov     #ADC12CSTARTADD_0, &ADC12CTL3	 			// 
+                                            		 	// Use sampling timer, set mode
+            	mov     #ADC12IE3, &ADC12IER0      		// Enable ADC12IFG.3 for ADC12MEM3
+            	bis     #ADC12ENC|ADC12ON|ADC12SC, &ADC12CTL0   // Enable+Start conversions
+		ret
+;---------------
+StopADC12:
+		bic	#ADC12ENC, &ADC12CTL0 	// correct Stop ADC!!!
+_stopADC	bit	#ADC12BUSY, &ADC12CTL1
+		jnz	_stopADC		// wait ready!!!
+		clr	&ADC12CTL0  			// disable ADC
+		clr	&ADC12CTL1  			// disable ADC
+   		clr     &ADC12IER0          	  	// disable
+   		clr     &ADC12IER1         	  	// disable
+		clr	&ADC12IFGR0			// clr ADC IFG
+		clr	&ADC12IFGR1			// clr ADC IFG
+		clr	&ADC12IFGR2			// clr ADC IFG
+                ret
+;---------------		                            
+InitADC12_Sample:
+		bic	#ADC12ENC|ADC12ON, &ADC12CTL0 		// correct Stop ADC!!!
+		mov     #ADC12SHT1_0, &ADC12CTL0  
+            	mov     #ADC12SHS_7|ADC12SSEL_3|ADC12DIV_4|ADC12CONSEQ_2|ADC12SHP, &ADC12CTL1 //  SMCLK/5 4.8mhz, start TA4 CCR1
+            	mov   	#ADC12RES__12BIT|ADC12DF, &ADC12CTL2	//  12bit (14 clock cycle conversion time), 2S comp
+            	mov     #ADC12CSTARTADD_15, &ADC12CTL3	// ADC12M15
+  	//mov     #ADC12IE15, &ADC12IER0     	// Enable ADC12IFG.15 for ADC12MEM15 (no if DMA!)
+   		clr     &ADC12IER0          	  	  	// disable if DMA!
+	//	bis	#ADC12ENC|ADC12ON, &ADC12CTL0           // enable conversion
+		ret
+;-------------------------------------------------------------------------------
+;               ***** ADC 12 interrupt *****
+;-------------------------------------------------------------------------------
+ADC12_VEC:
+		add	&ADC12IV, PC
+		RETI				// no interrupt
+		JMP  	ADOV  			// Vector 2: ADC overflow
+		JMP  	ADTOV 			// Vector 4: ADC timing overflow
+		JMP  	ADHI  			// Vector 6: ADC12HIIFG
+		JMP  	ADLO  			// Vector 8: ADC12LOIFG
+		JMP  	ADIN  			// Vector A: ADC12INIFG
+		RETI				// ADC12IFG0 flag
+		RETI				// ADC12IFG1 flag
+		RETI				// ADC12IFG2 flag
+		JMP	ADC12M3			// ADC12IFG3 flag
+		RETI		 		// ADC12IFG4 flag
+		RETI				// ADC12IFG5 flag
+		RETI				// ADC12IFG6 flag
+		RETI				// ADC12IFG7 flag
+		RETI				// ADC12IFG8 flag
+		RETI				// ADC12IFG9 flag
+		RETI				// ADC12IFG10 flag
+		RETI				// ADC12IFG11 flag
+		RETI				// ADC12IFG12 flag
+		RETI				// ADC12IFG13 flag
+		RETI				// ADC12IFG14 flag
+		JMP	ADC12M15		// ADC12IFG15 flag
+		RETI				// ADC12IFG16 flag
+		RETI				// ADC12IFG17 flag
+		RETI				// ADC12IFG18 flag
+		RETI				// ADC12IFG19 flag
+		RETI				// ADC12IFG20 flag
+		RETI				// ADC12IFG21 flag
+		RETI				// ADC12IFG22 flag
+		RETI				// ADC12IFG23 flag
+		RETI				// ADC12IFG24 flag
+		RETI				// ADC12IFG25 flag
+		RETI				// ADC12IFG26 flag
+		RETI				// ADC12IFG27 flag
+		RETI				// ADC12IFG28 flag
+		RETI				// ADC12IFG29 flag
+		RETI				// ADC12IFG30 flag
+		RETI				// ADC12IFG31 flag
+		RETI				// ADC12RDYIFG flag
+;---------------		
+ADC12M15:     
+		RETI
+;---------------		
+ADOV	
+		nop
+ADTOV
+                inc	&st_CntAdcOvfl
+		RETI
+ADHI  
+ADLO  
+ADIN  
+		nop
+		RETI
+;---------------		
+ADC12M3:       	
+		push	R4
+		mov     &ADC12MEM0, R4 		// AVEX
+		mov	R4, &MPY 		//
+		mov 	#43909, &OP2 		// *0.67 
+		add	&RES1, R4		// *1.67
+		add	&C_OFFSET_APOW, R4 	// add OffSet
+	//	add	&D_APOW, R4
+	//	rra	R4
+		mov     R4, &D_APOW		// Move results (D_AVEX)
+		
+		mov     &ADC12MEM1, R4 		// AVIN
+		mov	R4, &MPY 		//
+		mov 	#43909, &OP2 		// *0.67
+		add	&RES1, R4		// *1.67
+		add	&C_OFFSET_ASENS, R4 	// add OffSet
+	//	add	&D_SENS, R4
+	//	rra	R4
+		mov     R4, &D_ASENS		// Move results (D_AVIN)
+		
+            	mov     &ADC12MEM2, R4 		// results (ANX)
+		add	&C_OFFSET_AN1, R4 	// add OffSet
+            	mov     R4, &D_AN1 		// Move results (ANX)
+		
+            	mov     &ADC12MEM3, R4 		// results (ANY)
+		add	&C_OFFSET_AN2, R4 	// add OffSet
+            	mov     R4, &D_AN2 		// Move results (ANY)
+_ex_ADC_all		
+		bis	#ConvADC_B, &Status01
+		pop	R4
+		RETI
+//==============================================================================
+//======================= State Mashin UELEC ===================================
+//==============================================================================
+ServiceFLUXG
+	//	call	#Serv_StartStop		// Service start stop
+//==============
+Process_STM
+		add 	&STM_DSP, PC		
+		jmp	_MAIN_stop   	
+		jmp	_MAIN_start  	
+                jmp	_MAIN_set_AB_mn	
+                jmp	_MAIN_on_AB			
+		jmp	_MAIN_measure 	
+                jmp	_MAIN_off_AB_mn	
+                jmp	_MAIN_calc	
+                jmp	_MAIN_next
+//==============
+_MAIN_start
+		ret
+//==============
+_MAIN_set_AB_mn
+		ret
+//==============
+_MAIN_on_AB
+_MAIN_measure
+_MAIN_off_AB_mn
+_MAIN_calc
+_MAIN_stop 
+		ret
+//==============
+_MAIN_next
+		mov	#st_DSP_start, &STM_DSP		// Go.. Rx...
+_M_exit		ret		
+//==============================================================================
+//==============================================================================
+TEST_STATE_STM          // разрешенные состояния для изменения!
+	//	cmp.b	#st_DSP_calc, &STM_DSP
+	//	jeq	_M_exit
+		cmp.b	#st_DSP_stop, &STM_DSP
+		ret
+//==============================================================================
+//	bis	#NMIIFG, &SFRIFG1	// NMI
+//	bis	#NMIIE, &SFRIE1
+UNMI_VEC	
+		//&SYSUNIV
+		bic	#NMIIFG, &SFRIFG1	// NMI
+		nop
+		RETI
+//==============================================================================
+//==============================================================================
+//==============================================================================
+//================================================================
+POW_AMP_ON	// 
+		ret
+//--------------		
+POW_AMP_OFF		
+		ret
+//=================================================================
+//              Ram function
+//=================================================================
+init_FunctionRAM	// init func in RAM
+#ifdef  __RAM_FUNCTION__
+/*  	mov   #_LEA_Barker, R12
+  	mov   #ram_LEA_Barker, R13
+  	mov   #_size__LEA_Barker, R14
+  	 call  #CopyData               // src - R12, dst - R13,  length - R14
+  	mov   #_DMA_Barker, R12
+  	mov   #ram_DMA_Barker, R13
+  	mov   #_size__DMA_Barker, R14
+  	 call  #CopyData               // src - R12, dst - R13,  length - R14
+  	mov   #TAB_PHASE, R12
+  	mov   #ram_TAB_PHASE, R13
+  	mov   #_size_TAB_PHASE, R14
+  	 call  #CopyData               // src - R12, dst - R13,  length - R14
+*/	 
+#endif	
+	ret
+//=================================================================
+
+
+
+
+
+
+
+
+
+

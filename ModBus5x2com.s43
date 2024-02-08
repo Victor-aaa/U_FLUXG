@@ -1,0 +1,979 @@
+// #define	__COM_PORT_A1__
+;---------------------------------------
+;-------- *** StatusMB bits *** --------
+#define New_Format_B	(0x0001)
+#define Route_Field_B	(0x0002)
+// App specific		(0x0004)			
+#define Wait_Respond_B	(0x0008)	// ModBus Master mode
+
+#define RxOk_B		(0x0010)
+#define RxData_B	(0x0020)
+#define OkCRC_B		(0x0040)
+#define HostConnect_B	(0x0080)
+
+#define TxOk_B		(0x0100)   
+#define TxData_B	(0x0200)
+#define TxCRC_B		(0x0400)
+#define TxErr_B		(0x0800)
+
+// App specific		(0x1000)
+#define Uart1_B		(0x2000)
+#define _485_B		(0x4000)
+ChangeMemory_B	equ	(0x8000)
+//-------------------------------------------------------------------------------
+//           ***** Init UART *****
+//-------------------------------------------------------------------------------
+/*
+Const_115200	equ	SMCLK_f/115200		;
+Const_57600	equ	SMCLK_f/57600		;
+Const_19200	equ	SMCLK_f/19200		;
+Const_9600	equ	SMCLK_f/9600		;
+*/
+
+RS485_BRD	equ	(SMCLK_f/RS485_SPEED)
+RS485_MOD	equ	((SMCLK_f*11/RS485_SPEED)-(RS485_BRD*11))<<1
+RS485_3_5ch	equ	(TACLK_f*MODBUS_CHAR_TIMEOUT*11/RS485_SPEED) 	        // 10ch => 11bit for 19200 ... 115200 
+// http://www.modbus.org/ (...value of 1.750ms for inter-frame delay (t3.5))
+//RS485_T_pack	equ	((LENGTH_EXT_WR+Len_task_message+2+MODBUS_CHAR_TIMEOUT)*256*10/RS485_SPEED) 	
+#ifdef	__COM_AT__
+AT_BRD	equ	(SMCLK_f/AT_SPEED)
+AT_MOD	equ	((SMCLK_f*10/AT_SPEED)-(AT_BRD*10))<<1
+VAL_AT	equ	(TACLK_f*10*10/AT_SPEED) 	// 10char
+#endif		
+
+InitSerial:
+            	mov     #RS485_BRD, R12	
+	       	mov   	#RS485_MOD, R13      	; Modulation UCBRSx
+		call	#InitUartA0_RS485
+#ifdef	__COM_PORT_A1__
+            	mov     #RS485_BRD, R12	
+	       	mov   	#RS485_MOD, R13      	; Modulation UCBRSx
+		call	#InitUartA1_RS485
+#endif		
+#ifdef	__COM_AT__
+            	mov     #AT_BRD, R12	
+	       	mov   	#AT_MOD, R13      	; Modulation UCBRSx
+		call	#InitUartA1_AT
+#endif		
+                ret
+		
+InitUartA0_RS485:
+		bis.b   #UCSWRST, &UCA0CTL1  		; Reset
+		mov.b   #UCSWRST|UCSSEL_2, &UCA0CTL1  	; SMCLK & Reset
+            	mov     R12, &UCA0BRW 	
+	       	mov     R13, &UCA0MCTLW      		; Modulation UCBRSx
+     //          	bis.b	#TxD|RxD, &P2SEL 		; P2
+            	bic.b   #UCSWRST, &UCA0CTL1      	; **Initialize USCI state machine**
+            	bis     #UCRXIE, &UCA0IE		; Enable USCI_A0 RX interrupt
+		mov	#RS485_3_5ch, &VAL0_3_5ch
+		mov	#TxOk_B, &StatusMB0		; TxOk_B
+		ret
+		
+#ifdef	__COM_PORT_A1__
+InitUartA1_RS485:
+		bis.b   #UCSWRST, &UCA1CTL1  		; Reset
+		mov.b   #UCSWRST|UCSSEL_2, &UCA1CTL1  	; SMCLK & Reset
+            	mov     R12, &UCA1BRW 	
+	       	mov.b   R13, &UCA1MCTL      		; Modulation UCBRSx
+               	bis.b	#TxD1|RxD1, &P5SEL 		; P5
+            	bic.b   #UCSWRST, &UCA1CTL1      	; **Initialize USCI state machine**
+            	bis.b   #UCRXIE, &UCA1IE		; Enable USCI_A1 RX interrupt
+		mov	#RS485_2_5ch, &VAL1_2_5ch
+		//clr	&StatusMB1			
+		mov	#TxOk_B, &StatusMB1		; TxOk_B
+		ret
+#endif		
+//==============================================================================
+EUSCI_A0_VEC
+USCI_A0_VEC
+            add	    &UCA0IV,PC
+            reti                            ; Vector 0 - no interrupt
+            jmp     RX0IFG_HND              ; Vector 2 - RXIFG
+TX0IFG_HND                                  ; Vector 4 - TXIFG
+	#ifdef TxRx_B		
+		bis	#_485_B, &StatusMB0
+		bis.b	#TxRx_B			// TxRx_B = 1
+	#endif		
+  		br	#ModBusTX_VEC0		// --> to ModBus5x.s43
+//==============	
+RX0IFG_HND
+		bic	#PD_Req_B		// Power sawe OFF!
+	#ifdef TxRx_B		
+		bis	#_485_B, &StatusMB0
+	#endif		
+  		br	#ModBusRX_VEC0          // --> to ModBus5x.s43
+//============================
+#ifdef	__COM_PORT_A1__
+EUSCI_A1_VEC
+USCI_A1_VEC
+            	add     &UCA1IV,PC
+            	reti                            ; Vector 0 - no interrupt
+            	jmp     RX1IFG_HND              ; Vector 2 - RXIFG
+TX1IFG_HND                                      ; Vector 4 - TXIFG
+	#ifdef TxRx1_B		
+		bis	#_485_B, &StatusMB1     
+		bis.b	#TxRx1_B		// TxRx_B = 1
+	#endif		
+  		br	#ModBusTX_VEC1		// --> to ModBus5x.s43
+//==============	
+RX1IFG_HND      
+	#ifdef TxRx1_B		
+		bis	#_485_B, &StatusMB1
+	#endif		
+  		br	#ModBusRX_VEC1          // --> to ModBus5x.s43
+#endif		
+//==============================================================================
+//==============================================================================
+CalcNetworkID_M0:	// R4 = NetworkID
+		bit	#Wait_Respond_B, &StatusMB0 	// ModBus Master mode
+		jz      _sl
+	//	bic	#RF_Request_B, &StatusMB1 	// RS request
+_ms0		mov.b	&SlaveAddressMB0, R4
+		ret
+#ifdef	__COM_PORT_A1__
+CalcNetworkID_M1:	// R4 = NetworkID
+		bit	#Wait_Respond_B, &StatusMB1 	// ModBus Master mode
+		jz      _sl
+	//	bic	#RF_Request_B, &StatusMB1 	// RS request
+_ms1		mov.b	&SlaveAddressMB1, R4
+		ret
+#endif		
+_sl		mov.b	&C_DEVICE_ADDR, R4
+		ret
+//==============================================================================
+//==============================================================================
+//==============================================================================
+//==============================================================================
+;-------------------------------------------------------------------------------
+;           ***** UART 0 interrupt *****
+;-------------------------------------------------------------------------------
+TMRA_UART: 					// Vector 4: TACCR2
+		push	R4
+		push	R5
+		mov	&RxPtr0, R4             // --- read CRC from RxBuffer-2 to R5 ---
+		add	#RxBuffer0-2, R4
+		mov.b	@R4+, R5		// Lo CRC16
+		clr.b	-1(R4)			// clr after resive CRC16 only Low byte! (надо!)
+		mov.b	@R4, R4			// Hi CRC16
+		swpb	R4
+		add	R4, R5			// --- read CRC from RxBuffer-2 to R5 ---
+	
+		cmp.w	&CRC16Rx0, R5
+                jeq	RxCrcOk			
+		bit	#MODBUS_CRC_OFF_B, &C_FLAGS
+		jz	RxEnd                   // -- exit CRC BAD!!! --
+		cmp	#0xAA55, R5
+	//	cmp	#(CR+(256*LF)), R5
+		jne	RxEnd                   // -- exit 0x55AA BAD!!! --
+RxCrcOk		bis.w	#OkCRC_B, &StatusMB0	// OkCRC_B = 1
+    RxEnd:	
+		bis.w	#RxOk_B, &StatusMB0	// RxOk_B = 1
+		bic.w	#RxData_B, &StatusMB0  	// RxData_B = 0
+		clr.w   &TA0CCTL2         	// CCR2 interrupt disable
+		jmp	ExVecRX
+;-------------------------------------------------------------------------------
+;           ***** UART 1 interrupt *****
+;-------------------------------------------------------------------------------
+#ifdef	__COM_PORT_A1__
+TMRA_UART1: 					; Vector 2: TACCR3
+		push	R4
+		push	R5
+		mov	&RxPtr1, R4             // --- read CRC from RxBuffer-2 to R5 ---
+		add	#RxBuffer1-2, R4
+		mov.b	@R4+, R5		// Lo CRC16
+		clr.b	-1(R4)			// clr after resive CRC16 only Low byte! (надо!)
+		mov.b	@R4, R4			// Hi CRC16
+		swpb	R4
+		add	R4, R5			// --- read CRC from RxBuffer-2 to R5 ---
+	
+		cmp.w	&CRC16Rx1, R5
+                jeq	RxCrcOk1			
+		bit	#MODBUS_CRC_OFF_B, &C_FLAGS
+		jz	RxEnd1                   ; -- exit CRC BAD!!! --
+		cmp	#0xAA55, R5
+	//	cmp	#(CR+(256*LF)), R5
+		jne	RxEnd1                   ; -- exit 0x55AA BAD!!! --
+RxCrcOk1	bis.w	#OkCRC_B, &StatusMB1	; OkCRC_B = 1
+    RxEnd1:	
+		bis.w	#RxOk_B, &StatusMB1	; RxOk_B = 1
+		bic.w	#RxData_B, &StatusMB1  	; RxData_B = 0
+		clr.w   &TA0CCTL3         	; CCR3 interrupt disable
+		jmp	ExVecRX1
+#endif		
+//=====================================================================================	
+ModBusRX_VEC0:
+		push	R4
+		push	R5
+		bit.w	#RxData_B, &StatusMB0  	; RxData_B = 0?
+		jc      TstBufEnd
+		tst.b	&UCA0RXBUF_      	; Test Broadcast
+		jz      ID_Ok               	; Broadcast if ID=0
+		call	#CalcNetworkID_M0	; R4 = NetworkID
+		cmp.b	&UCA0RXBUF_, R4      	; Test NetworkID
+		jnz	ExVecRX                 ; NetworkID not compare  -- exit --
+	ID_Ok:	
+		bis.w	#RxData_B, &StatusMB0  	; RxData_B = 1
+		bic.w	#OkCRC_B, &StatusMB0   	; OkCRC_B = 0
+		mov.w	#0xFFFF, &CRC16Rx0      ; CRC16Rx = 0xFFFF init
+		clr.w	R4        		; clr RxPtr
+		mov.w	R4, &RxPtr0
+                jmp	DataToBuf
+		
+  TstBufEnd:	
+		cmp.w	#BufferLentgh, &RxPtr0  ; test buffer end !!!
+		jhs	RxEnd
+		mov.w	&RxPtr0, R4
+		cmp.w	#2, R4      		; test RxPtr < 2
+		jlo	DataToBuf
+		mov.b	RxBuffer0-2(R4), R5	; calc CRC @Ptr-2
+		call	#RxCRC16_ADD0		; Add new byte to CRC16 (34 cycle)
+  DataToBuf:	
+		mov.b	&UCA0RXBUF_, RxBuffer0(R4)
+		inc.w	&RxPtr0
+		mov.w	&TA0R, R4
+		add.w	&VAL0_3_5ch, R4
+		mov.w	R4, &TA0CCR2		; CCR1 = TAR+Const2_5ch
+		mov.w   #CCIE, &TA0CCTL2         ; CCR1 interrupt enabled
+  ExVecRX:
+  		pop	R5
+		pop	R4
+		RETI
+//===============================================
+#ifdef	__COM_PORT_A1__
+ModBusRX_VEC1:
+		push	R4
+		push	R5
+		bit.w	#RxData_B, &StatusMB1  	; RxData_B = 0?
+		jc      TstBufEnd1
+		tst.b	&UCA1RXBUF      	; Test Broadcast
+		jz      ID_Ok1               	; Broadcast if ID=0
+		call	#CalcNetworkID_M1	; R4 = NetworkID
+		cmp.b	&UCA1RXBUF, R4      	; Test NetworkID
+		jnz	ExVecRX1                 ; NetworkID not compare  -- exit --
+	ID_Ok1:	
+		bis.w	#RxData_B, &StatusMB1  	; RxData_B = 1
+		bic.w	#OkCRC_B, &StatusMB1   	; OkCRC_B = 0
+		mov.w	#0xFFFF, &CRC16Rx1      ; CRC16Rx = 0xFFFF init
+		clr.w	R4        		; clr RxPtr
+		mov.w	R4, &RxPtr1
+                jmp	DataToBuf1
+		
+  TstBufEnd1:	
+		cmp.w	#BufferLentgh, &RxPtr1   ; test buffer end !!!
+		jhs	RxEnd1
+		mov.w	&RxPtr1, R4
+		cmp.w	#2, R4      		; test RxPtr < 2
+		jlo	DataToBuf1
+		mov.b	RxBuffer1-2(R4), R5	; calc CRC @Ptr-2
+		call	#RxCRC16_ADD1		; Add new byte to CRC16 (34 cycle)
+  DataToBuf1:	
+		mov.b	&UCA1RXBUF, RxBuffer1(R4)
+		inc.w	&RxPtr1
+		mov.w	&TA0R, R4
+		add.w	&VAL1_2_5ch, R4
+		mov.w	R4, &TA0CCR3		; CCR3 = TAR+Const2_5ch
+		mov.w   #CCIE, &TA0CCTL3         ; CCR3 interrupt enabled
+  ExVecRX1:
+  		pop	R5
+		pop	R4
+		RETI
+#endif		
+//=====================================================================================	
+ModBusTX_VEC0:
+		cmp.w	#BufferLentghTX, &TxPtr0  ; test buffer end !!!
+		jlo	TstEndTx
+		bic.w	#TxData_B, &StatusMB0   ; OkData_B = 0
+		bis.w	#TxErr_B, &StatusMB0    ; OkErr_B = 1
+  EndTx:	
+		bic.w	#TxCRC_B, &StatusMB0   	; TxCRC_B = 0
+		
+#ifdef       MODBUS_SPI_SLAVE0
+                bic.b   #UCA0TXIE,&IE2         	// Disable USCI_A0 TX interrupt
+		bic.b	#UCA0RXIFG, &IFG2     	// Clr Rx interrupt flag
+                bis.b   #UCA0RXIE,&IE2         	// Enable USCI_A0 RX interrupt
+#else
+		bic   #UCSPB, &UCA0CTLW0  	// to 1 stop bit
+#endif		
+		//bic.b	#UCTXIFG, &UCA0IFG
+            	bic   #UCTXIE, &UCA0IE	; Disable USCI_A0 TX interrupt
+		
+	#ifdef TxRx_B		
+		bit	#_485_B, &StatusMB0
+		jz      _ex_tx0
+	    EINT
+WaitBusy    	bit.b	#UCBUSY, &UCA0STAT
+		jnz     WaitBusy
+		bic.b	#TxRx_B			; TxRx_B = 0 
+_ex_tx0		
+	#endif		
+		bis.w	#TxOk_B, &StatusMB0	; TxOk_B = 1
+	//	bic.b	#LED_GREEN_B
+		RETI
+  TstEndTx:
+		bit.w	#TxData_B, &StatusMB0	; TxData_B = ?
+		jz	EndTx
+		cmp.w	&CounterTx0, &TxPtr0	; test buffer end !!!
+		jlo	ToTxByte
+		bit.w	#TxCRC_B, &StatusMB0   	; TxCRC_B = ?
+		jz	TxCrcLow
+		mov.b	&CRC16Tx0+1, &UCA0TXBUF_	; U0TXBUF = High CRC16Tx
+		bic.w	#TxData_B, &StatusMB0	; TxData_B = 0 
+		RETI
+  TxCrcLow:	
+		mov.b	&CRC16Tx0+0, &UCA0TXBUF_	; U0TXBUF = low CRC16Tx
+		bis.w	#TxCRC_B, &StatusMB0	; TxCRC_B = 1
+		RETI
+  ToTxByte:
+		push	R5
+		mov.w	&TxPtr0, R5
+		mov.b	TxBuffer0(R5), R5
+		mov.b	R5, &UCA0TXBUF_ 		; for calc CRC16
+		inc.w	&TxPtr0
+		call	#TxCRC16_ADD0		; Add new byte to CRC16 (34 cycle)
+		pop	R5
+		RETI
+//===============================================
+#ifdef	__COM_PORT_A1__
+ModBusTX_VEC1:
+		cmp.w	#BufferLentgh, &TxPtr1   ; test buffer end !!!
+		jlo	TstEndTx1
+		bic.w	#TxData_B, &StatusMB1    ; OkData_B = 0
+		bis.w	#TxErr_B, &StatusMB1     ; OkErr_B = 1
+  EndTx1:	
+		bic.w	#TxCRC_B, &StatusMB1    ; TxCRC_B = 0
+		
+#ifdef       MODBUS_SPI_SLAVE1
+                bic.b   #UCA1TXIE,&IE2         	// Disable USCI_A0 TX interrupt
+		bic.b	#UCA1RXIFG, &IFG2     	// Clr Rx interrupt flag
+                bis.b   #UCA1RXIE,&IE2         	// Enable USCI_A0 RX interrupt
+#else
+		bic.b   #UCSPB, &UCA1CTL0  	// to 1 stop bit
+#endif		
+		bic.b	#UCTXIFG, &UCA1IFG
+		
+	#ifdef TxRx1_B		
+		bit	#_485_B, &StatusMB1
+		jz      _ex_tx1
+		EINT
+WaitBusy1    	bit.b	#UCBUSY, &UCA1STAT
+		jnz     WaitBusy1
+		bic.b	#TxRx1_B		; TxRx_B = 0
+_ex_tx1		
+	#endif		
+		bis.w	#TxOk_B, &StatusMB1	; TxOk_B = 1
+		RETI
+  TstEndTx1:
+		bit.w	#TxData_B, &StatusMB1	; TxData_B = ?
+		jz	EndTx1
+		cmp.w	&CounterTx1, &TxPtr1	; test buffer end !!!
+		jlo	ToTxByte1
+		bit.w	#TxCRC_B, &StatusMB1    ; TxCRC_B = ?
+		jz	TxCrcLow1
+		mov.b	&CRC16Tx1+1, &UCA1TXBUF	; U0TXBUF = High CRC16Tx
+		bic.w	#TxData_B, &StatusMB1	; TxData_B = 1
+		RETI
+  TxCrcLow1:	
+		mov.b	&CRC16Tx1+0, &UCA1TXBUF	; U0TXBUF = low CRC16Tx
+		bis.w	#TxCRC_B, &StatusMB1	; TxCRC_B = 1
+		RETI
+  ToTxByte1:
+		push	R5
+		mov.w	&TxPtr1, R5
+		mov.b	TxBuffer1(R5), R5
+		mov.b	R5, &UCA1TXBUF 		; for calc CRC16
+		inc.w	&TxPtr1
+		call	#TxCRC16_ADD1		; Add new byte to CRC16 (34 cycle)
+		pop	R5
+		RETI
+#endif		
+//=====================================================================================	
+#ifndef	EXT_NETWORK_ID
+CalcNetworkID:		; R4 = NetworkID
+     #ifdef	BaseNetworkID
+		mov.b	&P2IN, R4 		; Test NetworkID
+		rra.b	R4                      ; Test NetworkID
+		rra.b	R4
+		and.b	#0x03, R4
+		add.b	#BaseNetworkID, R4      ; NetworkID = BaseNetworkID + SW1 + SW2
+     #else
+		mov.b	&C_DEVICE_ADDR, R4      ; low byte C_DEVICE_ADDR = NetworkID
+     #endif
+		ret
+#endif		
+;-------------------------------------------------------------------------------
+;           ***** Service Uart MAIN  *****
+;-------------------------------------------------------------------------------
+InitTx0:
+		sub	R13, R5	        	; calc rel. counter
+InitTxErr0:		
+InitTxUART0     // R5 ptr end
+		inc	R5			; rel. counter Tx +1
+		mov	R5, &CounterTx0		; rel. counter Tx
+		clr	&TxPtr0			; TxPtr = 0x0000
+		mov	#0xFFFF, &CRC16Tx0       ; CRC16Tx = 0xFFFF init
+	#ifdef TxRx_B		
+	//	bis.b	#TxRx_B			; перенесено в прерывания TX!!!  TxRx_B = 1
+	#endif		
+		bic	#TxOk_B, &StatusMB0	; TxOk_B = 0
+		bis	#TxData_B, &StatusMB0	; TxData_B = 1
+#ifdef       MODBUS_SPI_SLAVE0
+                bic.b   #UCA0RXIE,&IE2         	// Disable USCI_A0 RX interrupt
+		bis.b	#UCA0TXIFG, &IFG2       ; Start Tx !!!	
+                bis.b   #UCA0TXIE,&IE2         	// Enable USCI_A0 TX interrupt
+#else
+		bis.b	#UCTXADDR, &UCA0CTL1	; TXWAKE = 1
+	#ifdef TxRx_B		
+		bis.b   #UCSPB, &UCA0CTL0  	; 2 stop
+	#endif		
+		
+            	bis   #UCTXIE, &UCA0IE	; Enable USCI_A0 TX interrupt
+		bis	#UCTXIFG, &UCA0IFG      ; Start Tx !!!	
+#endif		
+ExServUart:	ret
+//==============================================
+#ifdef	__COM_PORT_A1__
+InitTx1:
+		sub	R13, R5	        	; calc rel. counter
+InitTxErr1:
+InitTxUART1 	// R5 ptr end
+		inc	R5			; rel. counter Tx +1
+		mov	R5, &CounterTx1		; rel. counter Tx
+		clr	&TxPtr1			; TxPtr = 0x0000
+		mov	#0xFFFF, &CRC16Tx1       ; CRC16Tx = 0xFFFF init
+	#ifdef TxRx1_B		
+	//	bis.b	#TxRx_B			; перенесено в прерывания TX!!!  TxRx_B = 1
+	#endif		
+		bic	#TxOk_B, &StatusMB1	; TxOk_B = 0
+		bis	#TxData_B, &StatusMB1	; TxData_B = 1
+#ifdef       MODBUS_SPI_SLAVE1
+                bic.b   #UCA1RXIE,&IE2         	// Disable USCI_A0 RX interrupt
+		bis.b	#UCA1TXIFG, &IFG2       ; Start Tx !!!	
+                bis.b   #UCA1TXIE,&IE2         	// Enable USCI_A0 TX interrupt
+#else
+		bis.b	#UCTXADDR, &UCA1CTL1	; TXWAKE = 1
+	#ifdef TxRx1_B		
+		bis.b   #UCSPB, &UCA1CTL0  	; 2 stop
+	#endif		
+		
+            	bis.b   #UCTXIE, &UCA1IE	; Enable USCI_A1 TX interrupt
+		bis.b	#UCTXIFG, &UCA1IFG      ; Start Tx !!!	
+#endif		
+ExServUart1:	ret
+#endif		
+//==============================================
+RdMax	  equ	MaxPDU - 5
+WrMax	  equ	MaxPDU - 8
+
+ExtBlock_B	equ	0x80
+ReportSlaveID	equ	0x11
+WriteSingleCoil	equ	0x05
+ExtReadMemory	equ	0x43
+ExtWriteMemory	equ	0x44
+
+NWK_RdMax	  equ	MaxPDU - 12
+NWK_WrMax	  equ	MaxPDU - 12
+
+NWK_Message	equ	0x40
+NWK_ReadMemory	equ	0x41
+NWK_WriteMemory	equ	0x42
+
+#define ID_SincField	 	0x8000			// ID Sinc field
+#define ID_RouteField 		0x3000			// ID Route field
+#define ID_ProfileField		0x0F00			// ID Profile Field
+#define ID_ErrFrameField	0x0080			// ID Error Frame field
+#define ID_NwkFrameField	0x0040			// ID NWK frame = 1
+#define ID_NwkNC		0x0020			// ID NWK frame = 0
+#define ID_RespondField 	0x0010			// ID Respond field
+#define ID_CommandField	 	0x0007			// ID Command field
+#define ID_AppField 		0x0008			// ID App=1
+#define ID_WriteField 		0x0002			// ID Write=1
+#define ID_ReadField 		0x0001			// ID Read=1
+
+#define NWK_lenFCF 		2			// lenght FCF
+#define NWK_lenDstAddr 		2			// lenght Addr
+#define NWK_lenSrcAddr 		2			// lenght Addr
+#define NWK_lenSnFrame		2			// lenght Sinc frame
+#define NWK_lenRouteFrame_01	28			// lenght Route frame tupe 01
+#define NWK_lenRouteFrame_02	0			// lenght Route frame tupe 02
+#define NWK_lenCommand		12			// lenght Command frame
+#define NWK_lenNotify		10			// lenght Notify frame
+#define NWK_lenMin		NWK_lenNotify
+;------------------------------------------------
+LEN_EXT_COMMAND	= 5			// =5  not include NetworkID+CRC16
+LENGTH_EXT_RD	= LEN_EXT_COMMAND	// =5  not include NetworkID+CRC16
+LENGTH_EXT_WR	= LEN_EXT_COMMAND+1     // >=6  not include NetworkID+CRC16
+LENGTH_NWK_RD	= NWK_lenCommand	// 12  not include NetworkID+CRC16
+LENGTH_NWK_WR	= NWK_lenCommand+1     	// 13  not include NetworkID+CRC16
+LENGTH_NWK_MES	= 10                    // 14  not include NetworkID+CRC16
+MAX_DATA_MES	= (MaxPDU-LENGTH_NWK_MES-3)
+;------------------------------------------------
+ServiceUart:
+Serv_Uart0
+		bit	#RxOk_B, &StatusMB0	; RxOk_B ?
+		jz 	Serv_Uart1
+		
+		bit	#Wait_Respond_B, &StatusMB0	// Master Mode?
+		jnz	Serv_Uart1
+		
+		bit	#TxOk_B, &StatusMB0	; TxData_B ?
+		jz	Serv_Uart1
+		bic	#RxOk_B, &StatusMB0	; RxOk_B = 0
+		bit	#OkCRC_B, &StatusMB0	; OkCRC_B = ?
+		jz	Serv_Uart1
+		bis	#HostConnect_B, &StatusMB0// Host connect
+		mov	#RxBuffer0, R4
+		mov	#TxBuffer0+1, R5
+		mov	&RxPtr0, R12
+		bic	#Uart1_B, &StatusMB0	// StatusMB
+		inc	R4                      // ptr to Function code! NEW!!!
+		jmp	To_Serv_Uart
+Serv_Uart1
+#ifdef	__COM_PORT_A1__
+		bit	#RxOk_B, &StatusMB1	; RxOk_B ?
+		jz 	ExServUart
+		
+		bit	#Wait_Respond_B, &StatusMB1	// Master Mode?
+		jnz	ExServUart
+		
+	//	bit	#TxData_B, &StatusMB1	; TxData_B ?
+	//	jnz	ExServUart
+		bic	#RxOk_B, &StatusMB1	; RxOk_B = 0
+		bit	#OkCRC_B, &StatusMB1	; OkCRC_B = ?
+		jz	ExServUart
+		bis	#HostConnect_B, &StatusMB1// Host connect
+		mov	#RxBuffer1, R4
+		mov	#TxBuffer1+1, R5
+		mov	&RxPtr1, R12
+		bis	#Uart1_B, &StatusMB0	// именно StatusMB0 !!!
+		inc	R4                      // ptr to Function code! NEW!!!
+#else
+		ret
+#endif		
+To_Serv_Uart
+#ifdef STROB
+                bis.b	#STROB          	// set STROB
+#endif		
+		mov.b	&C_DEVICE_ADDR, -1(R5)      ; low byte C_DEVICE_ADDR = NetworkID  NEW!!!
+		mov	R5, R13
+		sub	#3, R12			; 3 = NetworkID + CRC16
+FromRFxx:	
+		bis	#New_Format_B, &StatusMB0
+		mov	#NWK_RdMax+1, R14
+		mov.b	@R4+, R10		; copy Function code --> R10
+		mov.b	R10, 0(R5)		; copy Function code --> TxBuffer
+		bic.b	#ID_AppField, R10
+		cmp.b	#NWK_ReadMemory, R10
+		jeq	NWK_ReadMemory_41	; Detect command NWK_ReadMemory 0x41
+		cmp.b	#NWK_WriteMemory, R10
+		jeq	NWK_WriteMemory_42	; Detect command NWK_WriteMemory 0x42
+		cmp.b	#NWK_Message, R10
+		jeq	NWK_Message_40		; Detect message NWK_Message 0x40
+		
+		mov	#RdMax+1, R14
+FromBT_LE	
+		bic	#New_Format_B, &StatusMB0
+		cmp.b	#ExtReadMemory, R10
+		jeq	ExtReadMemory_43	; Detect command ExtReadMemory 0x43
+		cmp.b	#ExtWriteMemory, R10
+		jeq	ExtWriteMemory_44	; Detect command ExtWriteMemory 0x44
+;------------------------------------------------
+FunNotSupport_01:                               ; Functions not support!!!
+		mov.b	#0x01, R10		; R10 = ExceptionCode 1,2,3,4
+ExceptionCode_XX:
+		bis.b	#BIT7, 0(R13)		; add Error bit to Command
+		bit	#New_Format_B, &StatusMB0
+                jnz	_new_exeption
+		mov.b	R10, 1(R13)
+		mov.b	#2, R5			; length Error=2
+TxErr		
+#ifdef	__COM_PORT_A1__
+		bit	#Uart1_B, &StatusMB0	
+                jnz	InitTxErr1              // Start Tx1 !!!
+#endif		
+#ifdef	__COM_AT__
+		bit	#Uart1_B, StatusMB0	// StatusMB
+                jz	_no_at_err_
+		br	#InitTxErr_AT
+_no_at_err_		
+#endif
+		jmp	InitTxErr0              // Start Tx0 !!!
+AddressError_02:		                ; Address Error
+		mov.b	#0x02, R10		; R10 = ExceptionCode 1,2,3,4
+		jmp	ExceptionCode_XX
+NbyteError_03:		                        ; Quantity Nbyte Error!!!
+		mov.b	#0x03, R10		; R10 = ExceptionCode 1,2,3,4
+		jmp	ExceptionCode_XX
+RdWrError_04:		                        ; Read or Write Error!!!
+		mov.b	#0x04, R10		; R10 = ExceptionCode 1,2,3,4
+		jmp	ExceptionCode_XX
+DeviceBusy_06:		                        ; SLAVE DEVICE BUSY, NO RESPOND
+		mov.b	#0x06, R10              	
+		jmp	ExceptionCode_XX
+RouteError_0A:		                	; GATEWAY PATH UNAVAILABLE, ROUTE ERROR	
+		mov.b	#0x0A, R10		
+		jmp	ExceptionCode_XX
+NotRespond_0B:		                        ; SLAVE DEVICE FAILED, NO ACK
+		mov.b	#0x0B, R10              	
+		jmp	ExceptionCode_XX
+SecureError_07:		                        ; Security Mode Error
+		mov.b	#0x07, R10		; R10 = ExceptionCode 1,2,3,4
+		jmp	ExceptionCode_XX
+		
+_new_exeption	
+		clr	R5
+		bit	#Route_Field_B, &StatusMB0
+		jz      _expt
+		add	#NWK_lenRouteFrame_01, R5
+		add	#NWK_lenRouteFrame_01, R13
+	_expt:	
+		mov.b	R10, NWK_lenCommand-1(R13)
+		add	#NWK_lenCommand, R5	 // length Error = 12
+		jmp	TxErr
+;------------------------------------------------
+NWK_Message_40
+		ret
+;------------------------------------------------
+NWK_ReadMemory_41               ; Command NWK_ReadMemory 0x41
+		call	#cpy_nwk
+		cmp.b	#LENGTH_NWK_RD, R12     // R12=length
+		jne	NbyteError_03       	// length command Error
+		jmp	RD_MEM
+		
+ExtReadMemory_43:		; Command ExtReadMemory 0x43
+		cmp.b	#LENGTH_EXT_RD, R12     // R12=length
+		jne	NbyteError_03        	// length command Error
+		mov.b	3(R4), 1(R5)            // N byte
+		add	#2, R5              	// Ptr+2 to DATA
+RD_MEM		
+		mov.b	@R4+, R7	; read BlockID --> low R7
+		mov.b	@R4+, R10	; read Hi OffSet --> low R10
+		mov.b	@R4+, R8	; read Low OffSet --> low R8
+		mov.b	@R4+, R9	; read Nbyte --> R9
+		swpb	R10		; Hi OffSet * 256
+		add.w	R10, R8		; Hi OffSet + Low OffSet  --> R8
+		tst.w	R9		; test zero Nbyte
+		jz	NbyteError_03   ; Quantity Nbyte Error!!!
+		cmp.w	R14, R9		; test Nbyte < RdMax+1
+		jhs	NbyteError_03   ; Quantity Nbyte Error!!!
+		call	#BlockToRealAddr // R7=BlockID, R8=OffSet, R9=Nbyte, -> R15=SizeBlocl, R7=StartAddrBlock, R8=Address, R11=low ACCESS LEVEL & high  LOCATION
+		jnz	AddressError_02	; error if not real block or address overflow
+		call	#TstAddrBlock 	
+		jnz	AddressError_02	; error if address overflow
+		call	#TestAccessRdAddr; test access address to read, Ok = Z
+		jnz	RdWrError_04    ; Read or Write Error!!!
+		
+		swpb	R11
+                and.b	#MaskLocation, R11 	; test Location memory
+		jz	RdData_43
+		cmp.b	#MEM_RAM, R11
+		jeq	RdData_43
+		cmp.b	#VIRTUAL, R11
+		jeq	VirtualRd_43
+#ifdef PTR_TUPE_BLOCK
+		cmp.b	#PTR_TUPE, R11
+		jeq	PtrTupeRd_43
+#endif
+		jmp	RdWrError_04
+		
+RdData_43:	
+	     dint
+#ifdef __DEBUG_UPPER_READ__
+                call    #DEBUG_UPPER_READ
+#endif
+LoopRdData_	     
+		mov.b	@R8+, 0(R5)
+#ifdef CLR_AFTER_READ
+                call    #ClrAfterRead
+#endif
+		inc	R5
+		dec	R9
+		jnz	LoopRdData_
+  	     eint		
+InitTx		
+#ifdef	__COM_PORT_A1__
+		bit	#Uart1_B, StatusMB0	// StatusMB
+                jnz	InitTx1
+#endif
+#ifdef	__COM_AT__
+		bit	#Uart1_B, StatusMB0	// StatusMB
+                jnz	InitTxUART_AT
+#endif
+		jmp	InitTx0
+VirtualRd_43		
+	     dint
+VirtualRd_	     
+		mov	@R8+, R11
+		mov.b	@R11, 0(R5)
+		inc	R5
+		dec	R9
+		jnz	VirtualRd_
+  	     eint		
+		jmp	InitTx
+#ifdef PTR_TUPE_BLOCK
+PtrTupeRd_43
+	     dint
+		sub	R7, R8  		// after => R7 = Start Address Block, R8 = OffSet
+                mov     @R6, R11      		// (R6) - PTR to PTR_TUPE_BLOCK
+		dec	R11		// new!!!!
+		sub	R8, R11			// Ptr - OffSet
+		dec	R15                      // R15 = Size_Block-1
+LoopPtrRd_
+                and     R15, R11 		// (Size_Block-1)&(Ptr - OffSet)  , calc cyclic address
+		mov	R11, R10
+                add     R7, R10                 // (Size_Block-1)&(Ptr - OffSet)+Start Address Block
+		mov.b	@R10, 0(R5)
+                dec     R11
+		inc	R5
+		dec	R9
+		jnz	LoopPtrRd_
+  	     eint		
+		jmp	InitTx
+#endif
+//==============================================================================
+NWK_WriteMemory_42             ; Command NWK_WriteMemory 0x42
+		call	#cpy_nwk
+		cmp.b	#LENGTH_EXT_WR+1, R12   // R12=length
+                jlo	NbyteError_03       	// length command Error
+		jmp	WR_MEM
+		
+ExtWriteMemory_44:		; Command ExtWriteMemory 0x44
+		cmp.b	#LENGTH_EXT_WR, R12     // R12=length
+                jlo	NbyteError_03        	// length command Error
+		mov.b	0(R4), 1(R5)       	; copy to TxBuffer
+		mov.b	1(R4), 2(R5)      	; copy to TxBuffer
+		mov.b	2(R4), 3(R5)       	; copy to TxBuffer
+		mov.b	3(R4), 4(R5)
+		add	#5, R5 			// Ptr+2 to DATA
+WR_MEM		
+#ifdef STROB
+                bic.b	#STROB          	// clr STROB
+#endif		
+		mov.b	@R4+, R7	; read BlockID --> low R7
+		cmp.b	#IdBlock_Header, R7
+		jz	RdWrError_04    ; Read or Write Error!!!
+		mov.b	@R4+, R10	; read Hi OffSet --> low R10
+		mov.b	@R4+, R8	; read Low OffSet --> low R8
+		mov.b	@R4+, R9	; read Nbyte --> R9
+		swpb	R10		; Hi OffSet * 256
+		add.w	R10, R8		; Hi OffSet + Low OffSet  --> R8
+		tst.w	R9		; test zero Nbyte
+		jz	NbyteError_03   ; Quantity Nbyte Error!!!
+		sub	#(RdMax-WrMax), R14  ; R14 to WrMax+1
+		cmp.w	R14, R9		; test Nbyte < WrMax+1
+		jhs	NbyteError_03   ; Quantity Nbyte Error!!!
+		call	#BlockToRealAddr // R7=BlockID, R8=OffSet, R9=Nbyte, -> R15=SizeBlocl, R7=StartAddrBlock, R8=Address, R11=low ACCESS LEVEL & high  LOCATION
+		jnz	AddressError_02	; error if not real block
+		call	#TstAddrBlock 	
+		jnz	AddressError_02		; error if address overflow
+		call	#TestAccessWrAddr; test access address to read, Ok = Z
+		jnz	RdWrError_04    ; Read or Write Error!!!
+		
+		bis	#ChangeMemory_B, &StatusMB0	// refresh LCD
+#ifdef	__COM_PORT_A1__
+		bis	#ChangeMemory_B, &StatusMB1	
+#endif
+#ifdef	__COM_AT__
+		bis	#ChangeMemory_B, &StatusAT	
+#endif
+		swpb	R11
+                and.b	#MaskLocation, R11 	; test Location memory
+		jz	FlashWr_44
+		cmp.b	#MEM_RAM, R11
+		jeq	RamWr_44
+		jmp	RdWrError_04
+		
+  RamWr_44:	
+	     dint
+	     nop
+RamWr_	     
+		mov.b	@R4+, 0(R8)
+		inc.w	R8
+		dec.w	R9
+		jnz	RamWr_
+  	     eint		
+#ifdef __DEBUG_AFTER_WRITE__
+                call    #DEBUG_AFTER_WRITE
+#endif
+		jmp	InitTx
+  FlashWr_44:
+                mov	R4, R7            	;  R7-Buffer Data
+		push	R13
+
+                bis     #Flash_EraseWr_B, &Status01 // flash erase write
+
+		call	#FR_WRITE   		// @R7 -> @R8 N=R9
+                bic     #Flash_EraseWr_B, &Status01 // flash erase write
+		pop	R13
+  		jmp	InitTx
+//==============================================================================
+cpy_nwk		
+		bic	#Route_Field_B, &StatusMB0
+		bis.b	#ID_RespondField, 0(R5)		// set Respond Field
+		inc	R5
+		
+		push	R12
+		push	R13
+		mov	#NWK_lenCommand-1, R12		
+		mov.b	@R5, R13
+		and.b	#ID_RouteField >>8, R13
+		cmp.b	#0x10, R13                      // Route frame tupe 01 ?
+		jne	_to_cpy
+		bis	#Route_Field_B, &StatusMB0
+		sub	#NWK_lenRouteFrame_01, R14		
+		add	#NWK_lenRouteFrame_01, R12		
+_to_cpy		
+		push	R14
+		mov	R12, R14      			// len - R14
+		mov	R4, R12                         // src - R12
+		mov	R5, R13       			// dst - R13
+		call	#CopyData                       // src - R12, dst - R13,  len - R14
+		mov	R12, R4
+		mov	R13, R5       			
+		pop	R14
+		pop	R13
+		pop	R12
+		sub	#4, R4
+		ret
+//==============================================================================
+TestAccessWrAddr:
+		mov.w	R11, R10
+		and.w	#MaskWrX, R10	; test only WrX!!!
+		cmp.w	#MaskWrX, R10
+		jmp	TstAA
+TestAccessRdAddr:
+		mov.w	R11, R10
+		and.w	#MaskRdX, R10  	; test only RdX!!!
+		cmp.w	#MaskRdX, R10
+	TstAA:	jz      ReturnError
+		jmp	ReturnOk        ; return status Ok!
+;------------------------------------------------
+BlockToRealAddr:        // R7=BlockID, R8=OffSet, R9=Nbyte, -> R15=SizeBlocl, R7=StartAddrBlock, R8=Address, R11=low ACCESS LEVEL & high  LOCATION
+                mov.w	#Block_Header, R10
+  NextBlock:		
+		cmp.b   @R10, R7
+		jeq     ReturnOk    	; Present Block
+		add.w	#16, R10
+		cmp.w	#EndBlock_Header, R10
+		jlo    	NextBlock  	; Not Block
+ReturnError:
+  		clrz                    ; return status Error!
+                ret
+TstAddrBlock:
+                incd	R10
+		mov.w	@R10+, R11	; R11 - low ACCESS LEVEL & high  LOCATION
+		mov.w	@R10+, R7	; R7 - Start Address Block
+                incd	R10
+		mov.w	@R10+, R15	; R15 - Size Block
+                incd	R10
+                mov.w   @R10+, R6     	; проверить! (R6) - PTR  for PTR_TUPE_BLOCK
+		
+		mov.w	R8, R10         ; test Offset+Nbyte < SizeBlock
+		add.w	R9, R10
+		cmp.w	R10, R15         ; R15 - Size Block
+		jlo	ReturnError
+		add.w	R7, R8  	; calc	Address to read or write
+ReturnOk:		
+		setz                    ; return status Ok!
+		ret
+//==============================================================================
+WaitRxDataUART                                          // wait if Rx UART active
+                ret
+//==============================================================================
+;-------------------------------------------------------------------------------
+;           ***** Calculation CRC16 *****
+;-------------------------------------------------------------------------------
+NotPolynom  equ 0xEAA8
+/*		
+						; Test CRC16  --> R4 = 0xFFFF --> OK!!!
+		mov.w	#0xFFFF, &CRC16Rx       ; CRC16Rx = 0xFFFF init
+		mov.b	#low NotPolynom, R5     ;  NotPolynom  equ 0xEAA8
+		call	#RxCRC16_ADD
+		mov.b	#high NotPolynom, R5
+		call	#RxCRC16_ADD
+		mov.w	&CRC16Rx, R4
+		jmp	wwwww
+;InitCRC:
+;		mov.w	#0xFFFF, &CRC16Rx       ; CRC16Rx = 0xFFFF init
+;		ret
+*/
+;------------------------------------------------		
+RxCRC16_ADD0:      				; Add new byte to CRC16 (34 cycle)
+	//	push	R5
+		xor.b	&CRC16Rx0, R5
+		mov.b	TabCRC_Hi(R5), &CRC16Rx0
+		xor.b	&CRC16Rx0+1, &CRC16Rx0
+		mov.b	TabCRC_Lo(R5), &CRC16Rx0+1
+	//	pop	R5
+		ret
+;------------------------------------------------		
+TxCRC16_ADD0:      				; Add new byte to CRC16 (34 cycle)
+	//	push	R5
+		xor.b	&CRC16Tx0, R5
+		mov.b	TabCRC_Hi(R5), &CRC16Tx0
+		xor.b	&CRC16Tx0+1, &CRC16Tx0
+		mov.b	TabCRC_Lo(R5), &CRC16Tx0+1
+	//	pop	R5
+		ret
+;------------------------------------------------		
+;------------------------------------------------		
+#ifdef	__COM_PORT_A1__
+RxCRC16_ADD1:      				; Add new byte to CRC16 (34 cycle)
+	//	push	R5
+		xor.b	&CRC16Rx1, R5
+		mov.b	TabCRC_Hi(R5), &CRC16Rx1
+		xor.b	&CRC16Rx1+1, &CRC16Rx1
+		mov.b	TabCRC_Lo(R5), &CRC16Rx1+1
+	//	pop	R5
+		ret
+;------------------------------------------------		
+TxCRC16_ADD1:      				; Add new byte to CRC16 (34 cycle)
+	//	push	R5
+		xor.b	&CRC16Tx1, R5
+		mov.b	TabCRC_Hi(R5), &CRC16Tx1
+		xor.b	&CRC16Tx1+1, &CRC16Tx1
+		mov.b	TabCRC_Lo(R5), &CRC16Tx1+1
+	//	pop	R5
+		ret
+#endif
+;------------------------------------------------		
+;------------------------------------------------		
+TabCRC_Hi:
+  db  0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81
+  db  0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0
+  db  0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01
+  db  0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41
+  db  0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81
+  db  0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0
+  db  0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01
+  db  0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40
+  db  0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81
+  db  0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0
+  db  0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01
+  db  0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41
+  db  0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81
+  db  0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0
+  db  0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01
+  db  0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41
+  db  0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81
+  db  0x40
+
+TabCRC_Lo:
+  db  0x00, 0xC0, 0xC1, 0x01, 0xC3, 0x03, 0x02, 0xC2, 0xC6, 0x06, 0x07, 0xC7, 0x05, 0xC5, 0xC4
+  db  0x04, 0xCC, 0x0C, 0x0D, 0xCD, 0x0F, 0xCF, 0xCE, 0x0E, 0x0A, 0xCA, 0xCB, 0x0B, 0xC9, 0x09
+  db  0x08, 0xC8, 0xD8, 0x18, 0x19, 0xD9, 0x1B, 0xDB, 0xDA, 0x1A, 0x1E, 0xDE, 0xDF, 0x1F, 0xDD
+  db  0x1D, 0x1C, 0xDC, 0x14, 0xD4, 0xD5, 0x15, 0xD7, 0x17, 0x16, 0xD6, 0xD2, 0x12, 0x13, 0xD3
+  db  0x11, 0xD1, 0xD0, 0x10, 0xF0, 0x30, 0x31, 0xF1, 0x33, 0xF3, 0xF2, 0x32, 0x36, 0xF6, 0xF7
+  db  0x37, 0xF5, 0x35, 0x34, 0xF4, 0x3C, 0xFC, 0xFD, 0x3D, 0xFF, 0x3F, 0x3E, 0xFE, 0xFA, 0x3A
+  db  0x3B, 0xFB, 0x39, 0xF9, 0xF8, 0x38, 0x28, 0xE8, 0xE9, 0x29, 0xEB, 0x2B, 0x2A, 0xEA, 0xEE
+  db  0x2E, 0x2F, 0xEF, 0x2D, 0xED, 0xEC, 0x2C, 0xE4, 0x24, 0x25, 0xE5, 0x27, 0xE7, 0xE6, 0x26
+  db  0x22, 0xE2, 0xE3, 0x23, 0xE1, 0x21, 0x20, 0xE0, 0xA0, 0x60, 0x61, 0xA1, 0x63, 0xA3, 0xA2
+  db  0x62, 0x66, 0xA6, 0xA7, 0x67, 0xA5, 0x65, 0x64, 0xA4, 0x6C, 0xAC, 0xAD, 0x6D, 0xAF, 0x6F
+  db  0x6E, 0xAE, 0xAA, 0x6A, 0x6B, 0xAB, 0x69, 0xA9, 0xA8, 0x68, 0x78, 0xB8, 0xB9, 0x79, 0xBB
+  db  0x7B, 0x7A, 0xBA, 0xBE, 0x7E, 0x7F, 0xBF, 0x7D, 0xBD, 0xBC, 0x7C, 0xB4, 0x74, 0x75, 0xB5
+  db  0x77, 0xB7, 0xB6, 0x76, 0x72, 0xB2, 0xB3, 0x73, 0xB1, 0x71, 0x70, 0xB0, 0x50, 0x90, 0x91
+  db  0x51, 0x93, 0x53, 0x52, 0x92, 0x96, 0x56, 0x57, 0x97, 0x55, 0x95, 0x94, 0x54, 0x9C, 0x5C
+  db  0x5D, 0x9D, 0x5F, 0x9F, 0x9E, 0x5E, 0x5A, 0x9A, 0x9B, 0x5B, 0x99, 0x59, 0x58, 0x98, 0x88
+  db  0x48, 0x49, 0x89, 0x4B, 0x8B, 0x8A, 0x4A, 0x4E, 0x8E, 0x8F, 0x4F, 0x8D, 0x4D, 0x4C, 0x8C
+  db  0x44, 0x84, 0x85, 0x45, 0x87, 0x47, 0x46, 0x86, 0x82, 0x42, 0x43, 0x83, 0x41, 0x81, 0x80
+  db  0x40
+;-------------------------------------------------------------------------------

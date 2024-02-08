@@ -1,0 +1,148 @@
+//============================================================================================================
+// *****  FLUXG V1.00 Scrypt *****
+//============================================================================================================
+//            Warning!!! Stop Macro if change macro file!
+// Kn - Key function 				'K[n=1-250]'....,LF
+// C_PB_UP      1
+// C_PB_DN      2
+// C_PB_RIGHT   3
+// C_PB_LEFT    4
+
+// MnX - Menu function 				'M[n=1-250]'....,LF   M1x - short PB, M1X - long PB
+// C_PB_SHORT  'x' 
+// C_PB_LONG   'X' 
+
+// CA - Clear LCD                               'CA',LF
+// CL - Clear line to end --- not used!
+// G1 - Graph logo format BMP     		'G1',LF
+// T1 - Text low CharGen        		'T1y02x10:1234567890',LF	
+// T2 - Text big CharGen        		'T2y04x50:asdfghjkl;',LF
+// P  - Print Register                       	'P104s1n1d0k2',LF       	-> [n=1,2,4]
+//                                              'P104s1n1/10d0k2',LF       	-> [n=1,2,4]  /10
+// W  - Memory change                       	'W105s2n2[c]1',LF 		-> [n=1,2],[c]clr,[s]set,[x]xor,[w]write,[a]add
+// N  - NWK DATA transfer			'N4001b105s2n2>0b105s2n2',LF
+// N  - NWK CONST transfer                      'N#1>4002b105s2n2',LF
+
+// IF 						'IF105s2n2[&]1',LF 		-> [n=1,2],[&,<,>=,=]
+// EL[S]
+// EN[D]
+
+// # - constant
+// b - block
+// s - shift, offset
+// n - length byte (1,2,[4])
+// k - length digit [zero cut-0, digits (1-8)]
+// y - line (0-7)
+// x - column (0-127)
+// / - divide 10 or 100
+// d - register DEC [pointer(0-4)], k]
+// h - register HEX [
+// : - start string
+// CR, LF - end string
+
+
+//.......................................................................................
+//============================================================================================================
+// *****  MOT_FR V1.00 Scrypt *****
+//============================================================================================================
+//Block_TextTask:              			
+	//DC8	'CA',LF
+  
+
+     	DC8	'IF105s5n1=0',LF			// Page1
+
+	//DC8	'CA',LF
+	//DC8	'K1W105s0n1w16',LF
+	//DC8	'K2W105s5n1x1',LF
+	
+ //   DC8	'IF104s8n1&4',LF	
+//	DC8	'T1y0x0:BS ',LF
+ //   DC8	'EL',LF
+//	DC8	'T1y0x0:EL ',LF
+//    DC8	'EN',LF
+//	DC8	'P103s6n1d0k2 ',LF
+	
+	DC8	'T1y0x0:-A- ',LF
+	DC8	'T1y0x32:-B- ',LF
+	DC8	'T1y0x64:-m- ',LF
+	DC8	'T1y0x96:-n- ',LF
+	
+	DC8	'T1y1x0:',LF
+	DC8	'P104s26n1d0k2 ',LF
+	DC8	'T1y1x32:',LF
+	DC8	'P104s27n1d0k2 ',LF
+	DC8	'T1y1x64:',LF
+	DC8	'P104s28n1d0k2 ',LF
+	DC8	'T1y1x96:',LF
+	DC8	'P104s29n1d0k2 ',LF
+	
+	DC8	'T1y2x0:amp ',LF
+	DC8	'P106s30n2d0k0:     ',LF
+	DC8	'T1y2x64:val ',LF
+	DC8	'P106s32n2d0k0:     ',LF
+	
+	DC8	'T1y4x0:anx ',LF
+	DC8	'P106s20n2d0k0:     ',LF
+	DC8	'T1y5x0:any ',LF
+	DC8	'P106s22n2d0k0:     ',LF
+	DC8	'T1y6x0:t ',LF
+	DC8	'P104s10n2d1k0: ',LF     
+	
+	DC8	'T1y3x72:rx ',LF
+	DC8	'P106s20n2d0k0:    ',LF // rx_Counter
+	DC8	'T1y4x72:tx ',LF
+	DC8	'P106s22n2d0k0:    ',LF	// tx_Counter
+	DC8	'T1y5x72:err ',LF
+	DC8	'P106s18n2d0k0:    ',LF	// er_Counter
+
+
+	DC8	'T1y7x0:',LF
+	DC8	'P104s12n2/10d1k0:v',LF
+	DC8	'T1y7x40:',LF
+	DC8	'P104s14n2/10d1k0:v',LF
+	
+	DC8	'T1y7x76: ',LF		// Clock , x=77 NOT!
+	DC8	'P104s3n1d0k2::',LF
+	DC8	'P104s2n1d0k2::',LF
+	DC8	'P104s1n1d0k2',LF	
+
+	DC8	'EN',LF
+	
+//******************************************************************	
+     	DC8	'IF105s5n1=1',LF			// Page2
+	
+	//DC8	'CA',LF
+	//DC8	'K1W105s0n1w16',LF
+	//DC8	'K2W105s5n1x1',LF
+	DC8	'T1y0x1:Ap ',LF
+	DC8	'P105s2n2d0k4',LF
+	DC8	'T1y0x64:Rssi ',LF
+	DC8	'P106s3n1d0k2:',LF
+	DC8	'T1y1x1:My ',LF
+	DC8	'P105s6n2d0k4:',LF
+	
+	DC8	'T1y1x64:',LF
+	DC8	'P104s3n1d0k2::',LF
+	DC8	'P104s2n1d0k2::',LF
+	DC8	'P104s1n1d0k2',LF	
+	
+	DC8	'T1y7x64:r',LF
+	DC8	'P105s5n1d0k1:',LF
+	DC8	'T1y7x92:',LF
+	DC8	'P104s28n2d2k3:v',LF
+	
+	DC8	'EN',LF
+//******************************************************************	
+	
+	
+	DC8	END_TEXT, END_TEXT
+//******************************************************************	
+
+
+
+
+
+
+
+
+

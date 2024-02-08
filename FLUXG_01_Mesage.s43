@@ -1,0 +1,90 @@
+//==============================================================================
+//========================== Service Measage UELEC =============================
+//==============================================================================
+#define	PtrTx	R5
+#define	_NWK_FCF_  		0x40
+#define	_DST_ADR_  		0x00
+#define	_MES_EXEPT_CODE_  	0xE0	// for EXPAND MESSAGE 
+#define	N_PARAMS		32+6	// byte for EXPAND MESSAGE 
+#define	_ID_TYPE_  		0x0011	// for FLUXG
+#define	PARAMS_32		D_STATUS
+//==============
+ServiceMessage
+	      	bit	#MESSAGE_REQ_B, &StatusAPP  	// Meassage result request?
+		jz	_Ex_serv_mesage
+ServiceMes
+		bit	#MESSAGE_ON_B, &C_FLAGS         // Message ON?
+		jz	_Ex_serv_m
+                bit     #RxOk_B|RxData_B|TxData_B, &StatusMB0
+		jz	MakeMessage
+                ret
+_Ex_serv_m
+	      	bic	#MESSAGE_REQ_B, &StatusAPP  	// clr Meassage request
+_Ex_serv_mesage
+		ret
+//==============
+MakeMessage
+                mov	#TxBuffer0, PtrTx
+                mov.b	&C_DEVICE_ADDR, 0(PtrTx)
+		mov.b	#LOW _NWK_FCF_, 1(PtrTx)
+		mov.b	#HIGH _NWK_FCF_, 2(PtrTx)
+		mov.b	#LOW _DST_ADR_, 3(PtrTx)
+		mov.b	#HIGH _DST_ADR_, 4(PtrTx)
+                mov.b	&C_DEVICE_ADDR+0, 5(PtrTx)
+                mov.b	&C_DEVICE_ADDR+1, 6(PtrTx)
+_inc_sn		inc	&SN__
+		jz      _inc_sn
+                mov.b	&SN__+0, 7(PtrTx)
+                mov.b	&SN__+1, 8(PtrTx)
+		
+		mov	&N_DATA_MES, R12
+		add	#N_PARAMS, R12
+		mov.b	R12, 10(PtrTx) 			// N
+		swpb	R12
+		add.b	#_MES_EXEPT_CODE_, R12
+		mov.b	R12, 9(PtrTx)			// ExceptCode 
+	    push  SR
+	    dint
+		nop
+                mov.b	&D_SEC_256, 11(PtrTx)     	// star N byte
+                mov.b	&D_SEC, 12(PtrTx)
+		mov.b	&D_MIN, 13(PtrTx)
+		mov.b	&D_HR, 14(PtrTx)
+	    pop	  SR
+		mov.b	#LOW _ID_TYPE_, 15(PtrTx)   	// _ID_TYPE_
+		mov.b	#HIGH _ID_TYPE_, 16(PtrTx)
+		
+		add	#17, PtrTx
+		mov	PtrTx, R13			// Params 32 skip!!!
+		add	#32, R13			// DATA 2048
+		
+	//	mov	&DATA_MES, R12
+	//	mov	&N_DATA_MES, R14
+		
+	//	call	#CopyWordSh 		// src - R12, dst - R13,  length - R14
+	//	call	#CopyWordStatSh		// 1ch  src - R12, dst - R13,  length - R14 (R11,R10,R9,R8,R7)
+	//	mov	R7, &st_Min
+	//	mov	R8, &st_Max
+	//	mov	R9, &D_Avg		// result!
+_end_cpy_data	
+//	m_swap  R13, PtrTx		// ptr Data
+		mov	#PARAMS_32, R12		// write Params32 after DATA 2048, min max valid!!!
+		mov	#32, R14
+		call	#CopyWord 		// src - R12, dst - R13,  length - R14
+		
+SendLongMessage
+	//	bis.b	#LED_GREEN_B
+                sub	#TxBuffer0, PtrTx
+		dec	PtrTx
+                call	#InitTxUART0
+	//	call	#Set_FLUXG_MODE			// app_MODE --> D_STATUS 
+		jmp	_Ex_serv_m
+//==============================================================================
+
+
+
+
+
+
+
+

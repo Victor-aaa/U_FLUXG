@@ -1,0 +1,875 @@
+//******************************************************************************
+//                             MODUL FLUXG 
+//******************************************************************************
+#define  __ACLK_LFMODCLK__
+//                          --- SETTINGS PARAMETERS ---
+#define RS485_SPEED		9600          // 115200 or 19200 or 9600   
+#define DEVICE_ID       15                     	// 
+#define DEVICE_ADDR     1                   	// ModBus Address RSCOM
+#define MODBUS_CHAR_TIMEOUT  10
+#define	__LCD_PRESENT__          		// OLED Display 
+//#define __A1_COM__				// RS485
+
+#define  __DEBUG_MODE__			// sinc for Oscilloscope!
+//#define  __RAM_FUNCTION__		// fast RAM function!
+//=========================================================================================== 
+#include "ToDo_FLUXG.h"                    	; #define controlled include file              
+#include <msp430fr6972.h>                       ; #define controlled include file
+#include "Global.h"                     	; #define controlled include file
+#include "FLUXG_01_def.h"                  	; #define controll ed include file
+
+ //       NAME    main                    ; module name
+//===========================================================================================
+//           Interrupt Vectors
+//===========================================================================================
+	COMMON  INTVEC          // Interrupt Vectors (offset from 0xFF80 + 0x10 for Password)
+	
+		ORG AES256_VECTOR    
+		DW  AES256_VEC
+		ORG RTC_VECTOR       
+		DW  RTC_VEC
+		ORG LCD_C_VECTOR
+		DW  LCD_VEC
+		ORG PORT4_VECTOR     
+		DW  PORT4_VEC
+		ORG PORT3_VECTOR     
+		DW  PORT3_VEC
+		ORG TIMER3_A1_VECTOR 
+		DW  TIMER3_A1_VEC
+		ORG TIMER3_A0_VECTOR 
+		DW  TIMER3_A0_VEC
+		ORG PORT2_VECTOR     
+		DW  PORT2_VEC
+		ORG TIMER2_A1_VECTOR 
+		DW  TIMER2_A1_VEC
+		ORG TIMER2_A0_VECTOR 
+		DW  TIMER2_A0_VEC
+		ORG PORT1_VECTOR     
+		DW  PORT1_VEC
+		ORG TIMER1_A1_VECTOR 
+		DW  TIMER1_A1_VEC
+		ORG TIMER1_A0_VECTOR 
+		DW  TIMER1_A0_VEC
+		ORG DMA_VECTOR       
+		DW  DMA_VEC
+		ORG USCI_B1_VECTOR   
+		DW  USCI_B1_VEC
+		ORG USCI_A1_VECTOR   
+		DW  USCI_A1_VEC
+		ORG TIMER0_A1_VECTOR 
+		DW  TIMER0_A1_VEC
+		ORG TIMER0_A0_VECTOR 
+		DW  TIMER0_A0_VEC
+		ORG ADC12_VECTOR     
+		DW  ADC12_VEC
+		ORG USCI_B0_VECTOR   
+		DW  USCI_B0_VEC
+		ORG USCI_A0_VECTOR   
+		DW  USCI_A0_VEC
+		ORG WDT_VECTOR       
+		DW  WDT_VEC
+		ORG TIMER0_B1_VECTOR 
+		DW  TIMER0_B1_VEC
+		ORG TIMER0_B0_VECTOR 
+		DW  TIMER0_B0_VEC
+		ORG COMP_E_VECTOR	
+		DW  COMP_E_VEC
+		ORG UNMI_VECTOR      
+		DW  UNMI_VEC
+		ORG SYSNMI_VECTOR    
+		DW  SYSNMI_VEC
+		ORG RESET_VECTOR          
+		DW  RESET_VEC
+//===========================================================================================
+
+        RSEG    CSTACK                  ; pre-declaration of segment 
+        ASEG    CODE                    ; place program in 'CODE' segment        
+	
+        ORG     FRAM_START              // Progam Start       
+
+RESET_VEC:
+ Init:		MOV     #SFE(CSTACK)-4, SP        // errata CPU46
+		MOV.W   #WDTPW+WDTHOLD,&WDTCTL  // Stop watchdog timer              
+		DINT
+		
+		call	#RESET_TST		// test Tupe RESET vector
+		call	#InitPort
+		bis.b	#LED_GREEN_B
+		//****************  delay for power Up  ************************************
+delay_200mS    	mov   	#200/16, R13		// delay 200 [mS] for 1MHZ
+        	call    #McuWait_mS		// delay N=R13 [mS] 
+		//**************************************************************************
+		call	#InitMemory		  // Cold start init Memory
+  	    WS:
+		call	#InitOscilator         	// Init LF 32.768kHz & HF 24.000MHz
+		call	#InitRTC          	// Init RTC
+		call	#InitTimerA0           	// System Timer
+		call	#InitSerial            	// System Uart
+		call	#InitSPI		// Init SPIs
+ #ifdef	__A1_COM__
+//		call	#InitRSCOM_A1		// init RSCOM
+ #endif
+		call	#Init_Analog            // init Analogs  100mS
+		call	#Init_DDS		// init DDS
+		call	#Init_USCI_I2C_B0	// Configure USCI_B0 for I2C mode
+                call	#TEST_HW_PRESENT	// test Hard Ware present
+		bic.b	#LED_GREEN_B
+	EINT          			// interrupts enabled
+		call	#INIT_HW_PRESENT	// init Hard Ware present
+    			mov   	#2, R13			// delay 2 [mS]
+        		call    #McuWait_mS		// delay N=R13 [mS] 
+		call	#Reset_ptr_script	
+//-------------- Tx string ----------------		
+	   mov.b #CSKEY_H, &CSCTL0_H	// unlock
+	   bis	#SMCLKOFF, &CSCTL4	// SMCLK OFF
+		
+		call	#InitDMA          	// Init DMA
+		call	#InitTimerB0		// PWM
+		call	#InitTimerA1		// timer 32bit...
+		
+	   bic	#SMCLKOFF, &CSCTL4	// SMCLK GO...  sinc TB0 & TA4
+	   mov.b #0, &CSCTL0_H		// Write incorrect key to lock
+   		
+//-------------- end ----------------------		
+		call	#INP_AMP_ON		// inp AMP On
+		call	#InitADC12
+		
+		
+    			mov   	#20, R13		// delay 20 [mS] for power meassure
+        		call    #McuWait_mS		// delay N=R13 [mS] 
+                bis     #StartWorking_B, &Status01      // start....
+//==============================================================================
+//           ***** main program *****
+//==============================================================================
+main_loop           				// main program (WDTPW+WDTCNTCL+WDTSSEL0+WDTIS2) 
+		mov   	#WDT_ARST_1000,&WDTCTL	// reset WDT ACLK if RTC - 1000mS
+		//mov	#WDTPW|WDTIS__8192|WDTSSEL__VLOCLK|WDTCNTCL, &WDTCTL	// reset WDT VLOCLK  ~ 1000mS
+		call	#ServiceFLUXG
+		call	#ServiceUart            // Service Uart
+		call	#ServiceCommand		// Service COMMAND
+                call    #Update1sec             // Update 1 sec.
+	//	bit	#PD_Mode_B		// Power Save mode..
+	//	jnz	main_loop
+		
+		call	#ServiceSCRIPT          // Script...
+                call    #Update1min             // Update 1 min.
+          	call    #Update025sec           // Update 0.25 sec.
+		bit	#BIT0, &TB0R		// TB0 runing all time clk 24mhz
+		rlc	&RndNum
+        	jmp 	main_loop
+//==============================================================================
+//==============================================================================
+_RST_All                
+	// дать всем команду COM_ResetMaster, потом себе!!!  
+_RST_Master
+/*		clr	&TB0CTL
+		clr	&TA0CTL
+		clr	&TA1CTL
+		clr	&TA2CTL
+		clr	&TA3CTL
+		clr	&TA4CTL
+*/		
+		mov.b	#PMMPW_H, &PMMCTL0_H
+		bis.b	#PMMSWPOR, &PMMCTL0_L	// POR reset
+	//	bis.b	#PMMSWBOR, &PMMCTL0_L   // BOR reset
+	//	jmp	$			// WDT reset
+		ret
+//--------------		
+RESET_TST	// test Tupe RESET vector
+		mov	&SYSRSTIV, R12
+		cmp	#0x04, R12		// RST vector?
+		jeq	_RES_ok
+		cmp	#0x14, R12		// POR vector?
+		jeq	_POR_ok
+		mov	R12, &TINYRAM_START+0   // TINYRAM_LENGTH = 22byte
+		mov.b	#PMMPW_H, &PMMCTL0_H
+		bis.b	#PMMSWPOR, &PMMCTL0_L	// POR reset
+		ret
+_RES_ok		
+_POR_ok		
+		inc	&TINYRAM_START+2	// cnt RESET
+		ret
+//==============================================================================
+Update025sec
+                bit     #_025sec_B, &Status01
+                jz      Ex_1xxx
+                bic     #_025sec_B, &Status01
+		
+                bis     #RefreshScript_B, &StatusAPP
+		call	#Main_STM	// температура, давление
+                ret
+//===========================================	
+Update1sec 
+                bit     #_1sec_B, &Status01
+                jz      Ex_1xxx
+                bic     #_1sec_B, &Status01
+
+//.............
+		call	#ServiceSW
+		call	#ServiceBattery		// Service Battery
+		call	#ServicePowerSave	// Service PS
+//.............
+		cmp	#st_DSP_stop, &STM_DSP	// state Stop?
+		jne	_ex_mdp				// no
+		call	#Set_FLUXG_MODE		// app_MODE --> D_STATUS 
+_ex_mdp
+//.............
+_ex_1s	
+		ret
+//===========================================	
+Update1min
+                bit     #_1min_B, &Status01
+                jz      Ex_1xxx
+                bic     #_1min_B, &Status01
+//.............
+/*		inc	&TimerPowOFF
+		cmp	&C_TIME_POWER_OFF, &TimerPowOFF
+		jlo     _ex_pow_off
+		cmp	#1290, &D_POW 		// Vbat > 12.9V ?
+		jhs     _ex_pow_off             // No Save mode if Vbat>12.9V
+		bis	#PD_Req_B		// Power Save request..
+_ex_pow_off */		
+//.............
+Ex_1xxx         ret
+
+//==============================================================================
+ServiceSW
+/*
+//--------------		
+_get_COM  // get status COM
+	bit.b	#INVALID_RS_B
+	jc	_com_clr
+	bis	#INVALID_COM_B, &StatusAPP	
+	bis	#INVAL_COM_B, &D_STATUS	
+	jmp	_ex_com
+_com_clr	
+	bic	#INVALID_COM_B, &StatusAPP
+	bic	#INVAL_COM_B, &D_STATUS
+_ex_com	
+*/
+//--------------	
+/*
+_get_SW  // get status SW
+	bit.b	#SW_B
+	jc	_sw_clr
+	bis	#SW_DOWN_B, &D_STATUS	
+	jmp	_ex_sw
+_sw_clr	
+	bic	#SW_DOWN_B, &D_STATUS
+_ex_sw
+*/
+//--------------		
+//--------------		
+//--------------		
+	ret
+//==============================================================================
+//==============================================================================
+Pause_SLOT_I2C    // clr RTCIE, wait Rdy  i2c
+	//	bic	#RTCIE, &RTCCTL		// clr RTC IE
+		br	#wait_RDY_I2C		// ... wait I2C Ready
+//--------------		
+Protect_I2C_call  // call function in protect SLOT...		
+		call	#Pause_SLOT_I2C    	// clr RTCIE, wait Rdy  i2c
+		call	R12
+Proceed_SLOT_I2C  // wait Rdy  i2c, set RTCIE 		
+		call	#wait_RDY_I2C		// ... wait I2C Ready
+	//	bis	#RTCIE, &RTCCTL		// set RTC IE
+		ret
+//==============================================================================
+//==============================================================================
+#define  	PAGE_MASK  0x03  // page mask
+#define  	MAX_PAGE   1     // n page = MAX_PAGE
+//#define  	MAX_LINE   4     // n line = MAX_LINE
+_tab_n_line     DB      1,1,7,1   // line in current page
+
+//==============
+TEST_PAGE
+		and.b   #PAGE_MASK, &app_Menu_Page
+		mov.b	#MAX_PAGE, R14
+		cmp.b	R14, &app_Menu_Page
+		jl     _np_min
+		mov.b	#0, &app_Menu_Page
+		jmp     _ex_np
+_np_min
+		cmp.b	#0, &app_Menu_Page
+		jge     _ex_np
+		dec.b	R14
+		mov.b	R14, &app_Menu_Page
+_ex_np		ret
+//==============
+TEST_LINE
+		mov.b	&app_Menu_Page, R14
+		mov.b	_tab_n_line(R14), R14
+		cmp.b	R14, &app_Menu_Line
+		jl     _nl_min
+		mov.b	#0, &app_Menu_Line
+		jmp     _ex_nl
+_nl_min
+		cmp.b	#0, &app_Menu_Line
+		jge     _ex_nl
+		dec	R14
+		mov.b	R14, &app_Menu_Line
+_ex_nl		ret
+//==============
+TEST_b_Min_Max	// R12- ptr value, R13-min, R14max
+		cmp.b	@R12, R13
+		jl     _tl_min
+		mov.b	R13, 0(R12) 
+		ret
+_tl_min
+		cmp.b	@R12, R14
+		jge     _ex_nl
+		mov.b	R14, 0(R12)
+		ret
+//==============================================================================
+InitSPI:	//AD9833
+		mov     #UCCKPH|UCCKPL|UCMSB|UCMST|UCSYNC|UCSWRST|UCSSEL_2, &UCB1CTLW0 ; SMCLK, 3-pin, 8-bit SPI mstr, MSB 1st 
+            	mov     #1, &UCB1BRW           		; 8/2 = 4mHz,   If UCBRx = 0, fBitClock = fBRCLK
+            	bic     #UCSWRST, &UCB1CTLW0      	; **Initialize USCI state machine**
+            	ret
+//-------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------
+InitPort:
+                mov.b	#0, &P1SELC           			; P1
+                mov.b	#0, &P1OUT				; P1
+                mov.b	#0, &P1REN 				; P1
+                mov.b	#RxTx|LED|TP2|TP1, &P1DIR  		; P1
+
+                mov.b	#TMR4|TMR5|TMR6, &P2SEL0      		; P2
+                mov.b	#0, &P2OUT 				; P2
+                mov.b	#0, &P2REN 				; P2
+                mov.b	#0, &P2DIR		        	; P2
+		
+                mov.b	#B1_SI|B1_CLK|TMR3, &P3SEL0      	; P3
+                mov.b	#0, &P3OUT				; P3
+                mov.b	#0, &P3SEL0				; P3
+                mov.b	#0, &P3DIR				; P3
+
+                mov.b	#TxD|RxD, &P4SEL0      			; P4
+                mov.b	#SDA1|SCL1, &P4SEL1      		; P4
+                mov.b	#0, &P4OUT 				; P4
+                mov.b	#0, &P4DIR 				; P4
+
+                mov.b	#0, &P5OUT 				; P5
+                mov.b	#LD6, &P5DIR				; P5
+
+                mov.b	#TMR1|TMR2, &P6SEL0      		; P6
+                mov.b	#0, &P6OUT 				; P6
+                mov.b	#0, &P6DIR		        	; P6
+
+                mov.b	#0, &P7SEL0				; P7
+                mov.b	#0, &P7OUT 				; P7
+                mov.b	#LD1|LD2|LD3|LD4|LD5, &P7DIR		; P7
+
+                mov.b	#APOW|ASENS|AN1|AN2, &P9SEL0		; P9
+                mov.b	#APOW|ASENS|AN1|AN2, &P9SEL1		; P9
+                mov.b	#0, &P9OUT 				; P9
+                mov.b	#0, &P9DIR				; P9
+
+
+                mov.b	#0, &PJSEL0_L				; PJ 
+                mov.b	#0, &PJOUT_L 				; PJ
+                mov.b	#NC_J1, &PJDIR_L			; PJ
+
+		bic.w   #LOCKLPM5,PM5CTL0
+		ret
+//----------------------
+INP_AMP_ON
+		ret
+//-------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------
+MCLK_f  = 16000000
+SMCLK_f = 8000000
+ACLK_f  = 32768
+
+InitOscilator:  //CSCTL0_H = CSKEY_H
+
+#if MCLK_f == 21000000
+	mov	#FWPW+NWAITS_2, &FRCTL0	// 2ws
+#endif
+#if MCLK_f == 16000000
+	mov	#FWPW+NWAITS_1, &FRCTL0	// 1ws
+#endif
+		mov.b	#CSKEY_H, &CSCTL0_H	// unlock
+		mov	#0x0033, &CSCTL3	// div = 8, errata CS12
+#if MCLK_f == 21000000
+		mov	#0x004A, &CSCTL1	// 21mhz
+#endif
+#if MCLK_f == 16000000
+		mov	#0x0048, &CSCTL1	// 16mhz
+#endif
+
+#ifdef	__ACLK_LFMODCLK__
+		mov	#0x0253, &CSCTL2	// ACLK=LFMODCLK
+#else
+		mov	#0x0053, &CSCTL2	// ACLK=LFXTCLK
+#endif
+		mov	#0xCCC8, &CSCTL4	// (0xCDC9)0xCCC8
+		mov	#0x00C5, &CSCTL5
+		mov	#0x000F, &CSCTL6	// + MODCLK
+
+            	mov   	#(10000),R12
+		call	#halMcuWaitUs		// errata CS12
+#if SMCLK_f == 16000000
+		mov	#0x0000, &CSCTL3	// div = 1  16mhz/1=16mhz!!!!
+#endif
+#if SMCLK_f == 8000000
+		mov	#0x0010, &CSCTL3	// div = 2  16mhz/2=8mhz!!!!
+#endif
+
+            		// Loop until XT1,XT2 & DCO stabilizes
+do_while3   	bic   	#LFXTOFFG|HFXTOFFG, &CSCTL5    	// Clear XT2,XT1 fault flags
+            	bic   	#OFIFG, &SFRIFG1        // Clear fault flags
+            	bit   	#OFIFG, &SFRIFG1        // Test oscillator fault flag
+            	jc      do_while3
+
+		mov.b	#0, &CSCTL0_H		// Write incorrect key to lock
+		ret
+//==============================================================================
+//           ***** Init Timer A *****
+//==============================================================================
+InitTimerA0:     				// System Timer
+TACLK_f = ACLK_f
+	    	mov   	#TASSEL_1+MC_2, &TA0CTL  	// ACLK
+		ret
+//==============================================================================
+//-------------------------------------------------------------------------------
+//           ***** Init Memory *****
+//-------------------------------------------------------------------------------
+InitMemory:
+//---------------
+//---------------		
+ClrBlock_Settings:
+		mov	#Block_Settings, R12
+		mov	#SizeBlock_Settings/2, R13
+		call	#LoopClrData 		// clr @R12, N=R13
+//---------------		
+ClrBlock_Data:
+		mov	#Block_Data, R12
+		mov	#SizeBlock_Data/2, R13
+		call	#LoopClrData 		// clr @R12, N=R13
+  PresetTime:
+		mov.b	#7, &D_DATE     	// set 00:00:00 07-05-2021 пятница - 5
+		mov.b	#5, &D_MONTH
+		mov.b	#21, &D_YEAR
+		mov.b	#ErrorRTC_B+5, &D_DAY
+//---------------	
+ClrBlock_Status:
+		mov	#Block_Status, R12
+		mov	#SizeBlock_Status/2, R13
+		call	#LoopClrData 		// clr @R12, N=R13
+//---------------	
+ClrDataMemory:
+		mov	#RAM_START, R12
+		mov	#(RAM_LENGTH-8)/2, R13
+		call	#LoopClrData 		// clr @R12, N=R13
+//---------------	
+/*ClrLeaMemory:
+		mov	#LEARAM_START, R12
+		mov	#(LEARAM_LENGTH)/2, R13
+		call	#LoopClrData 		// clr @R12, N=R13
+*/		
+//---------------
+InitAppXX
+		call	#init_FunctionRAM	// init func in RAM
+		mov	#st_DSP_stop, &STM_DSP
+		
+InitParams
+		mov	&TINYRAM_START+0, &st_EvtReset  // tiny RAM event RESET
+		mov	&TINYRAM_START+2, &st_CntReset  // tiny RAM cnt RESET
+		
+		mov	&C_FLAGS_APP, &app_MODE		// ????
+		mov	&C_FLAGS_APP, &D_STATUS
+Clr_Ph_min_max		
+		mov	#180, &st_Phase_min
+		mov	#-180, &st_Phase_max
+		ret
+//================
+LoopClrData:					// write R14=0x0000 @R12, N=R13			
+  		clr	R14
+       LoopClr:	
+  		mov	R14, 0(R12)
+		incd	R12
+		dec	R13
+		jnz	LoopClr
+		ret
+//==============================================================================
+//==============================================================================
+//==============================================================================
+#define	Rxx4	R4
+#define	Rxx5	R5
+//==============================================================================
+//==============================================================================
+InitRTC		// Init RTC module 
+		mov.b 	#RTCKEY_H, &RTCCTL0_H 	// Write correct key to unlock RTC_C
+            	bis.b  	#RTCTEVIE + RTCRDYIE, &RTCCTL0_L 
+		bis	#RTCHOLD + RTCMODE, &RTCCTL13   // RTC enable, RTC hold
+		mov	&C_PPM, &RTCOCAL    	// LSB correction approximately -240 ppm (RTCCALS = 1) or a +240 ppm (RTCCALS = 0) adjustment   	
+		
+		mov	#RT0PSIE|RT0IP_4|RT0PSDIV_7|RT1SSEL_0, &RTCPS0CTL	// 1024 Hz, Prescale Timer 0 Control Register
+		mov	#RT1PSIE|RT1IP_1|RT1PSDIV_6|RT1SSEL_2, &RTCPS1CTL	// 32 Hz, Prescale Timer 1 Control Register
+
+            	mov.w   #0x2021,&RTCYEAR        ; Year = 0x2021
+            	mov.b   #0x05,&RTCMON           ; Month = 0x05 = May
+            	mov.b   #0x07,&RTCDAY           ; Day = 0x07 
+            	mov.b   #0x05,&RTCDOW           ; Day of week = 0x05 = Monday
+            	mov.b   #0x00,&RTCHOUR          ; Hour = 0x00
+            	mov.b   #0x00,&RTCMIN           ; Minute = 0x00
+            	mov.b   #0x00,&RTCSEC           ; Seconds = 0x00
+
+            	mov.w   #0x220,&RTCADOWDAY      ; RTC Day of week alarm = 0x2
+            	mov.w   #0x1023,&RTCAMINHR      ; RTC Alarm
+
+            	bic     #RTCHOLD, &RTCCTL13     ; Start RTC calendar mode
+		MOV.B 	#00h, &RTCCTL0_H 		// Write incorrect key to lock RTC_C
+		ret
+//==============================================================================
+RTC_VEC 	//   RTC Interrupt Handler
+//==============================================================================
+            add     &RTCIV,PC
+            RETI                            ; No interrupts
+	    jmp     RTCOFIFG_HND 	    ; Vector 2: RTCOFIFG 2
+            jmp     RTCRDYIFG_HND           ; RTCRDYIFG
+            jmp     RTCEVIFG_HND            ; RTCEVIFG
+            jmp     RTCAIFG_HND             ; RTCAIFG
+            jmp     RT0PSIFG_HND            ; RT0PSIFG
+            jmp     RT1PSIFG_HND            ; RT1PSIFG
+            RETI                            ; Reserved
+//==========================================		
+RTCOFIFG_HND
+//==========================================		
+
+		RETI
+//==========================================		
+RTCRDYIFG_HND   // Interrupts every second
+//==========================================	
+  clock_:
+		bit	#PD_Mode_B		// Power Save mode..
+		jnz     _1_sec_
+		mov	#10, &TimerLED1                 // [mS]
+_1_sec_	
+                bis     #_1sec_B, &Status01             // set per 1 sec.
+		inc.b	&D_SEC				// sec
+		cmp.b	#60, &D_SEC
+		jlo	ClockEnd
+		clr.b	&D_SEC
+	
+                bis     #_1min_B, &Status01             // set per 1 min.
+		inc.b	&D_MIN                  	// min
+		cmp.b	#60, &D_MIN
+		jlo	ClockEnd
+		clr.b	&D_MIN
+
+                bis     #_1hour_B, &Status01             // set per 1 hour.
+		inc.b	&D_HR                   	// hour
+		cmp.b	#24, &D_HR
+		jlo	ClockEnd
+		clr.b	&D_HR
+	
+                push    Rxx4
+		
+		inc.b	&D_DATE
+		inc.b	&D_DAY
+                mov.b  &D_DAY, Rxx4
+                bic.b   #ErrorRTC_B+DayLightRTC_B, Rxx4
+		cmp.b	#7, Rxx4
+		jne	dayOk
+		and.b	#ErrorRTC_B+DayLightRTC_B, &D_DAY 
+	dayOk:
+		mov.b	&D_MONTH, Rxx4         	; Rxx4 = &D_MONTH
+            	cmp.b   #2, Rxx4       		; month '02' == FEB
+		jne     noLeap
+            	cmp.b   #29, &D_DATE        	; date '29' == FEB
+	        jne	noLeap
+		bit.b	#0x03, &D_YEAR    	; if leap year
+		jz	ClockEnd_ret
+        noLeap:
+		cmp.b	&D_DATE, Tab_daysInMonth-1(Rxx4)
+		jhs	ClockEnd_ret	
+	date_1:	
+		mov.b	#1, &D_DATE
+
+		inc.b	Rxx4			; Rxx4 = &D_MONTH
+		cmp.b	#13, Rxx4               ; Rxx4 = &D_MONTH
+		jlo	Cl_End
+		mov.b	#1, Rxx4                ; Rxx4 = &D_MONTH
+		inc.b	&D_YEAR
+	Cl_End:	
+		mov.b	Rxx4, &D_MONTH
+  ClockEnd_ret:
+                pop     Rxx4
+  ClockEnd:
+		RETI
+Tab_daysInMonth DC8 	31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
+//==========================================		
+RTCEVIFG_HND    // Interrupts every minute
+//==========================================	
+/*
+                push    Rxx4
+                bis     #_1min_B, &Status01 		// set per 1 min.
+
+                mov.b   &D_MIN, Rxx4
+                tst.b   Rxx4                            // test 0, 10, 20, 30, 40, 50 sec
+                jz      S10m
+                cmp.b   #10, Rxx4
+                jeq     S10m
+                cmp.b   #20, Rxx4
+                jeq     S10m
+                cmp.b   #30, Rxx4
+                jeq     S10m
+                cmp.b   #40, Rxx4
+                jeq     S10m
+                cmp.b   #50, Rxx4
+                jne     incm
+         S10m:
+                bis     #_10min_B, &Status01            // set per 10 min
+                bis     #StatusINV10m_B, &msg_StatusXX  // old status for one request message
+         incm:
+	 	pop	Rxx4
+*/		
+		RETI
+//==========================================		
+RTCAIFG_HND	// Intrrupt calibration frequency		
+//==========================================		
+		RETI
+//==========================================		
+RT0PSIFG_HND	// Interrupts 1024 Hz
+//==========================================		
+	// ******************
+	// ***** TIMERS *****
+		tst	&TimerUSER_mS
+		jz	TstTMR_X1
+		dec	&TimerUSER_mS        	// Timer USER decrement 1mS
+    TstTMR_X1:
+/*		tst	&TimerBUZ
+		jz	TstTMR_X2
+		dec	&TimerBUZ        	// TimerBUZ decrement 1mS
+		xor.b	#BUZ_B 			// BUZ ON!
+		jnz	TstTMR_X2
+		bic.b	#BUZ_B	 		// LED OFF!
+    TstTMR_X2:*/
+    TstTMR_X3:	
+		tst	&TimerLED1
+		jz	TstTMR_X4
+		dec	&TimerLED1        	// TimerLED decrement 1mS
+		bis.b	#LED_GREEN_B			// LED ON!
+		jnz	TstTMR_X4
+		bic.b	#LED_GREEN_B	 		// LED OFF!
+    TstTMR_X4:	
+		RETI 						
+//==========================================		
+RT1PSIFG_HND	// Interrupts 32 Hz
+//==========================================		
+                push    Rxx4
+		
+		add.b	#8, &D_SEC_256
+		mov.b	&D_SEC_256, Rxx4
+		and.b	#0x38, Rxx4
+		jnz     _ex_025
+                bis     #_025sec_B, &Status01
+		
+	//	call	#StepDRV_1up	// StepDRV_05up
+_ex_025		
+	//	call	#StepDRV_1dn	// StepDRV_05up
+		pop	Rxx4
+		RETI
+//==============================================================================
+//==============================================================================
+//==============================================================================
+//==============================================================================
+TIMER0_A0_VEC
+		RETI
+//======================
+TIMER0_A1_VEC 					; Interrupt latency
+		ADD 	&TA0IV, PC		; Add offset to Jump table3
+		RETI 				; Vector 0: No interrupt
+		JMP 	TMR0A_1_HND 		; Vector 2: TA0CCR1
+		JMP 	TMR0A_2_HND 		; Vector 4: TA0CCR2
+		RETI				; Vector 6: TA0CCR3
+		RETI				; Vector 8: TA0CCR4
+		RETI                            ; Vector 10: Reserved
+		RETI                            ; Vector 12: Reserved
+T0AIFG_HND: 					; Vector 14: TAIFG Flag
+_Ex_INT		RETI                            ; Back to main
+//---------------------------------------
+TMR0A_1_HND					; Vector 2: TACCR1 
+#ifdef  __A1_COM__
+		br      #TMRA_UART1        	
+#else
+		RETI                           
+#endif
+//---------------------------------------
+TMR0A_2_HND: 	br      #TMRA_UART        	; Vector 4: TACCR2
+//==============================================================================
+USCI_A1_VEC
+
+PORT4_VEC
+PORT3_VEC
+
+USCI_B1_VEC
+//USCI_B0_VEC
+
+COMP_E_VEC
+AES256_VEC		
+//RTC_C_VEC
+
+TIMER3_A1_VEC
+TIMER3_A0_VEC
+TIMER2_A1_VEC
+TIMER2_A0_VEC
+//TIMER1_A1_VEC
+//TIMER1_A0_VEC
+//TIMER0_B1_VEC
+//TIMER0_B0_VEC
+
+LCD_VEC
+WDT_VEC
+//UNMI_VEC
+SYSNMI_VEC		// SYSSNIV
+		RETI
+//==============================================================================
+PORT1_VEC
+		ADD 	&P1IV,PC 		; Add offset to Jump table 3
+		RETI 			; Vector 0: No interrupt
+		JMP 	P1_0_HND 	; Vector 2: Port 1 bit 0
+		JMP 	P1_1_HND 	; Vector 4: Port 1 bit 1
+		JMP 	P1_2_HND 	; Vector 6: Port 1 bit 2
+		JMP 	P1_3_HND 	; Vector 8: Port 1 bit 3
+		JMP 	P1_4_HND 	; Vector 10: Port 1 bit 4
+		JMP 	P1_5_HND 	; Vector 12: Port 1 bit 5
+		JMP 	P1_6_HND 	; Vector 14: Port 1 bit 6
+P1_7_HND 				; Vector 16: Port 1 bit 7
+		RETI 			
+P1_6_HND 				; Vector 14: Port 1 bit 6
+		RETI
+P1_5_HND 				; Vector 12: Port 1 bit 5
+		RETI
+P1_4_HND 				; Vector 10: Port 1 bit 4
+		RETI
+P1_3_HND 				; Vector 8: Port 1 bit 3
+		RETI
+P1_2_HND 				; Vector 6: Port 1 bit 2
+		RETI
+P1_1_HND 				; Vector 4: Port 1 bit 1
+		RETI
+P1_0_HND 				; Vector 2: Port 1 bit 0
+		RETI
+//==============================================================================
+PORT2_VEC
+		ADD 	&P2IV,PC 		; Add offset to Jump table 3
+		RETI 			; Vector 0: No interrupt
+		JMP 	P2_0_HND 	; Vector 2: Port 2 bit 0
+		JMP 	P2_1_HND 	; Vector 4: Port 2 bit 1
+		JMP 	P2_2_HND 	; Vector 6: Port 2 bit 2
+		JMP 	P2_3_HND 	; Vector 8: Port 2 bit 3
+		JMP 	P2_4_HND 	; Vector 10: Port 2 bit 4
+		JMP 	P2_5_HND 	; Vector 12: Port 2 bit 5
+		JMP 	P2_6_HND 	; Vector 14: Port 2 bit 6
+P2_7_HND 				; Vector 16: Port 2 bit 7
+		RETI
+P2_6_HND 				; Vector 14: Port 2 bit 6
+		RETI
+P2_5_HND 				; Vector 12: Port 2 bit 5
+		RETI
+P2_4_HND 				; Vector 10: Port 2 bit 4
+		RETI
+P2_3_HND 				; Vector 8: Port 2 bit 3
+		RETI
+P2_2_HND 				; Vector 6: Port 2 bit 2
+		RETI
+P2_1_HND 				; Vector 4: Port 2 bit 1
+		RETI
+P2_0_HND 				; Vector 2: Port 2 bit 0
+		RETI
+//==============================================================================
+//==============================================================================
+ServiceAPP
+		ret
+//==============================================================================
+//==============================================================================
+Hex2Bit	DW	0x0001,0x0002,0x0004,0x0008,0x0010,0x0020,0x0040,0x0080
+	DW	0x0100,0x0200,0x0400,0x0800,0x1000,0x2000,0x4000,0x8000
+//==============================================================================
+//==============================================================================
+CopyData                                // src - R12, dst - R13,  length - R14
+		tst	R14
+		jz	ex_cd
+    loop_cd:	mov.b   @R12+, 0(R13)
+              	inc     R13
+		dec	R14
+                jnz	loop_cd
+    ex_cd:	ret
+//===============================================
+McuWait_mS	// R13 - [mS]
+		mov	#1000, R12
+		call	#halMcuWaitUs
+		dec	R13
+		jnz	McuWait_mS
+		ret
+		
+m_fill_nop macro
+	rept \1
+	nop
+	endr
+	endm		
+//===============================================	
+halMcuWaitUs:	// R12 - [uS]
+                tst     R12
+                jz      ExWait 
+ 	        dec     R12
+			// 16mhz 
+//=================			
+	m_fill_nop ((MCLK_f - 8000000)/1000000)		
+//==================			
+                jmp     halMcuWaitUs  
+    ExWait:     ret
+//==============================================================================
+SetChangeMEMORY
+REPAIR_TMR_AFTER_ERASE_FLASH
+	/*	
+		push	R11
+		mov     &TA0R, R11
+		add	#2, R11
+                mov     R11, &TA0CCR0  
+		pop	R11 
+*/		
+		ret                            
+//==============================================================================
+//======================================================
+#include "FR_A_Utils.s43"                     		
+#include "MATH_LIB_.s43"                     		
+#include "ModBus5x2com.s43"                      	
+//#include "MFS5.s43"                     		
+#include "FLUXG_01_Mesage.s43"                     	
+#include "eUSCI_B0_I2C.s43"                     	
+#include "FLUXG_01_ADC12.s43"                     	
+//#include "AtanU.s43"                     		
+#include "FLUXG_01_Function.s43"            		
+#include "OLED_SSD1309_I2C.s43"            		
+#include "MS5837_30.s43"            			
+#include "AD9833.s43"            			; #define controlled include file 
+//#include "RS_COM_A1.s43"                     		
+#include "SCRIPT_FR.s43"                     		
+//--------------
+#ifdef	__LCD_PRESENT__
+AdrTab8x8
+#include "8X8X.inc"    	// chargen 8x8 
+end_Tab8x8
+AdrTab8x16
+#include "8x16x.inc"    // chargen 8x16
+end_Tab8x16
+Block_Logo		// logo file
+//#include "lcd_skill.h"            		
+//#include "lcd_glazz.h"            		
+//#include "lcd_cyber.h"            		
+//#include "lcd_tigr_fs.h"            		
+#include "lcd_ton.h"            		
+//#include "lcd_bars.h"            		
+end_Logo
+#endif
+//--------------
+
+#include "FLUXG_01_Block_def.h"                     	
+#include "ToDo_FLUXG.h"                     		
+//==========================================================================
+       END

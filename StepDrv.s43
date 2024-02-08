@@ -1,0 +1,61 @@
+//======================= Step Drive ========================
+
+Tab_StepDRV_1step
+	DB  0x10,0x40,0x20,0x80,0x10,0x40,0x20,0x80	
+Tab_StepDRV_05step
+	DB  0x10,0x50,0x40,0x60,0x20,0xA0,0x80,0x90
+//=======================
+StepDRV_1dn
+		dec	&IndexDrv
+		jmp	_step_x1
+StepDRV_1up
+		inc	&IndexDrv
+_step_x1	push	R12
+		mov.b	&IndexDrv, R12
+		and	#0x07, R12
+		mov.b	Tab_StepDRV_1step(R12), &StepDrvPort
+		pop	R12
+		ret
+//------------------		
+StepDRV_05dn	
+		dec	&IndexDrv
+		jmp	_step_x05
+StepDRV_05up
+		inc	&IndexDrv
+_step_x05	push	R12
+		mov	&IndexDrv, R12
+		and	#0x07, R12
+		mov.b	Tab_StepDRV_05step(R12), &StepDrvPort
+		pop	R12
+		ret
+//------------------		
+Off_DRV
+		bic.b	#0x0F, &StepDrvPort
+		ret
+//=======================
+	
+	
+
+//============================================================
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

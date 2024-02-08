@@ -1,0 +1,326 @@
+//==============================================================================
+//==============================================================================
+#define AP3216C   0x1E  // st_LIGHT_B
+#define TMP75AID  0x48  // st_TMP_B
+#define AT24C512  0x50  // st_EEPROM_B
+#define ST25DV04  0x53  // 0x53, 0x57  st_NFC_B
+#define BME680    0x77	// 0x76, 0x77  st_BAROM_B
+#define OLED096   0x78  // 0x78, 0x7A  st_LCD_B
+#define AMG8833   0x68  // 0x68, 0x69  st_IR8x8_B
+
+//==============================================================================
+PollDevicePresent	// test device, set st_Periperal
+	bic	#st_LIGHT_B|st_TMP_B|st_EEPROM_B|st_NFC_B|st_BAROM_B|st_LCD_B, &st_Periperal
+	clr	R13
+	mov	#AP3216C, R12
+	call	#USCI_I2C_slave_present	// R12 slave_address => R12 returnValue = !(UCB1STAT & UCNACKIFG)
+	jnz      _end_light
+	bis	#st_LIGHT_B, R13
+_end_light
+	mov	#TMP75AID, R12
+	call	#USCI_I2C_slave_present	// R12 slave_address => R12 returnValue = !(UCB1STAT & UCNACKIFG)
+	jnz      _end_tmp
+	bis	#st_TMP_B, R13
+_end_tmp
+	mov	#AT24C512, R12
+	call	#USCI_I2C_slave_present	// R12 slave_address => R12 returnValue = !(UCB1STAT & UCNACKIFG)
+	jnz      _end_ee
+	bis	#st_EEPROM_B, R13
+_end_ee
+	mov	#ST25DV04, R12
+	call	#USCI_I2C_slave_present	// R12 slave_address => R12 returnValue = !(UCB1STAT & UCNACKIFG)
+	jnz      _end_nfc
+	bis	#st_NFC_B, R13
+_end_nfc
+	mov	#BME680, R12
+	call	#USCI_I2C_slave_present	// R12 slave_address => R12 returnValue = !(UCB1STAT & UCNACKIFG)
+	jnz      _end_barom
+	bis	#st_BAROM_B, R13
+_end_barom
+	mov	#AMG8833, R12
+	call	#USCI_I2C_slave_present	// R12 slave_address => R12 returnValue = !(UCB1STAT & UCNACKIFG)
+	jnz      _end_ir8x8
+	bis	#st_IR8x8_B, R13
+_end_ir8x8	
+	mov	#OLED096, R12
+	call	#USCI_I2C_slave_present	// R12 slave_address => R12 returnValue = !(UCB1STAT & UCNACKIFG)
+	jnz      _end_lcd
+	bis	#st_LCD_B, R13
+_end_lcd
+	bis	R13, &st_Periperal		// set periperal presents!
+	ret
+//======================================
+InitDevicePresent	// I2C present Device only -interruptable-
+	bit	#st_LIGHT_B, &st_Periperal
+	jz      _ini_2
+	call	#Init_AP3216C
+_ini_2
+	bit	#st_TMP_B, &st_Periperal
+	jz      _ini_3
+	call	#Init_TMP75AID
+_ini_3
+	bit	#st_EEPROM_B, &st_Periperal
+	jz      _ini_4
+	call	#Init_AT24C512
+_ini_4
+	bit	#st_NFC_B, &st_Periperal
+	jz      _ini_5
+	call	#Init_ST25DV04
+_ini_5
+	bit	#st_BAROM_B, &st_Periperal
+	jz      _ini_6
+	call	#Init_BME680
+_ini_6
+	bit	#st_IR8x8_B, &st_Periperal
+	jz      _ini_7
+	call	#Init_AMG8833
+_ini_7
+	bit	#st_LCD_B, &st_Periperal
+	jz      _ini_ex
+	call	#Init_OLED096
+_ini_ex
+	ret
+//======================================
+AP3216_SysConfigR =   0x00
+AP3216_IrDataR =   0x0A
+AP3216_AlsDataR =  0x0C
+AP3216_PsDataR =   0x0E
+AP3216_AlsConfigR =   0x10
+AP3216_PsConfigR =    0x20
+AP3216_PsLedCtrlR =   0x21
+AP3216_PsLedWaitR =   0x24
+//===============
+Init_AP3216C
+	mov	#AP3216C, &Slave_address
+	mov	#(0x03<<8)+AP3216_SysConfigR, &AddrREG 	// 011: ALS and PS+IR functions active
+	call	#USCI_I2C_Tx2				// Slave address, AddrREG
+    m_wait_RDY_i2c
+	mov	#(0x20<<8)+AP3216_AlsConfigR, &AddrREG 	// 10: 1291 lux
+	call	#USCI_I2C_Tx2				// Slave address, AddrREG
+    m_wait_RDY_i2c
+	mov	#(0x05<<8)+AP3216_PsConfigR, &AddrREG 	// 0x05
+	call	#USCI_I2C_Tx2				// Slave address, AddrREG
+    m_wait_RDY_i2c
+	mov	#(0x13<<8)+AP3216_PsLedCtrlR, &AddrREG 	// 0x13
+	call	#USCI_I2C_Tx2				// Slave address, AddrREG
+    m_wait_RDY_i2c
+	mov	#(0x33<<8)+AP3216_PsLedWaitR, &AddrREG 	// 0x13   0x03=7*mean time
+	call	#USCI_I2C_Tx2				// Slave address, AddrREG
+    m_wait_RDY_i2c
+    
+_read_ALS_IR_PS	//----------------------    
+	//mov	#AP3216C, &Slave_address
+	mov	#AP3216_AlsDataR, &AddrREG      // ALS
+	call	#USCI_I2C_TxAddr1_RxData2 		// Slave address, AddrREG -> TemporaryREG
+    m_wait_Rx_i2c	
+	  	mov	 &TemporaryREG, R12		// light
+		mov	R12, &DataLight
+    m_wait_RDY_i2c
+	//mov	#AP3216C, &Slave_address
+	mov	#AP3216_IrDataR, &AddrREG       // IR
+	call	#USCI_I2C_TxAddr1_RxData2 		// Slave address, AddrREG -> TemporaryREG
+    m_wait_Rx_i2c	
+	  	mov	 &TemporaryREG, R12		// IR
+		mov	R12, &DataIR
+    m_wait_RDY_i2c
+	//mov	#AP3216C, &Slave_address
+	mov	#AP3216_PsDataR, &AddrREG       // PS
+	call	#USCI_I2C_TxAddr1_RxData2 		// Slave address, AddrREG -> TemporaryREG
+    m_wait_Rx_i2c	
+	  	mov	 &TemporaryREG, R12		// PS
+		mov	R12, &DataPS
+    m_wait_RDY_i2c
+    m_Reset_i2c 
+/*    
+	mov	#AP3216C, &Slave_address
+	mov	#AP3216_IrDataR, &AddrREG      	// IR, ALS, PS
+	mov	#6,  &I2C_RxCnt			// 3 word
+	call	#USCI_I2C_TxAddr1_RxDatan 	// Slave address, AddrREG, I2C_RxCnt -> TemporaryREG
+    m_wait_Rx_i2c	
+	
+	  	mov	 &TemporaryREG, R12		// PS
+	  	mov	 &TemporaryREG+2, R13		// PS
+	  	mov	 &TemporaryREG+4, R14		// PS
+    m_wait_RDY_i2c
+    m_Reset_i2c 
+*/    
+ 	ret
+//======================================
+TMP75_TEMP_REG = 0
+TMP75_CONFIG_REG = 1
+TMP75_Tlow_REG = 2	// default 75 gr
+TMP75_Thigh_REG = 3     // default 80 gr
+
+CONFIG_DATA 	= 32	// 10bit 0.25C
+OS		= 128
+SHUTDOWN	= 1
+//===============
+Init_TMP75AID
+	mov	#TMP75AID, &Slave_address
+	mov	#TMP75_TEMP_REG, &AddrREG
+	call	#USCI_I2C_TxAddr1_RxData2 		// Slave address, AddrREG -> TemporaryREG
+    m_wait_Rx_i2c	
+	  	mov	 &TemporaryREG, R12		// temperature
+	  	swpb	 R12
+	  
+	  push	SR
+	  dint				// reg / 25.6 = 00.0 gr
+		mov	R12, &MPY
+		mov	#65536*10/256, &OP2          	
+                mov	&RES1, R12             
+	  pop	SR
+		mov	R12, &DataTEMP
+    m_wait_RDY_i2c
+	
+//	mov	#TMP75AID, &Slave_address
+	mov	#(((CONFIG_DATA|OS|SHUTDOWN)<<8)+TMP75_CONFIG_REG), &AddrREG 	// DATA to CONFIG REG
+	call	#USCI_I2C_Tx2				// Slave address, AddrREG
+    m_wait_Tx_i2c
+    m_Reset_i2c 
+	ret
+//======================================
+AT24C512_MyREG =  (65536-16)	// My data 
+//===============
+Init_AT24C512
+	mov	#AT24C512, &Slave_address
+	mov	#AT24C512_MyREG, &AddrREG
+	mov	#4, &I2C_RxCnt			// read 4 byte 
+	call	#USCI_I2C_TxAddr2_RxDatan 	// Slave address, AddrREG, I2C_RxCnt -> TemporaryREG
+    m_wait_Rx_i2c
+    	// ...
+    m_wait_RDY_i2c
+    m_Reset_i2c 
+
+	ret
+//======================================
+//#define ST25DV04  0x53  // 0x53, 0x57  st_NFC_B
+ST25DV_E2 = 0x57   	// access to system area
+ST25DV___ = 0x53	// access to user memory, Dynamic registers or Mailbox
+//===============
+Init_ST25DV04
+	mov	#ST25DV___, &Slave_address
+	mov	#0, &AddrREG
+	mov	#4, &I2C_RxCnt			// read 4 byte 
+	call	#USCI_I2C_TxAddr2_RxDatan 	// Slave address, AddrREG, I2C_RxCnt -> TemporaryREG
+    m_wait_Rx_i2c
+    	// ...
+    m_wait_RDY_i2c
+    m_Reset_i2c 
+
+	ret
+//======================================
+Init_BME680
+
+	ret
+//======================================
+Init_AMG8833	// IR8x8	
+
+	ret
+//======================================
+Init_OLED096
+#ifdef	__OLED_PRESENT__
+		call	#Init_OLED
+		//call    #BmpLogoToLCD            // LogoToLCD
+		call	#ClrLcd
+		call	#Wait_ToLCD           	 // text
+    m_wait_RDY_i2c
+    m_Reset_i2c 
+#endif		
+	ret
+//==============================================================================
+//==============================================================================
+//==============================================================================
+//==============================================================================
+I2C_STM		// 1/4   4.00 sec cyckle
+		bit	#0x0F, Rxx5
+		jnz      _ex_12c
+		and	#0xF0, Rxx5
+            	rram.w  #3, Rxx5
+		add 	Rxx5, PC			
+		ret
+		ret 
+		jmp	Reading_TMP		
+		jmp	Calc_TMP 
+		jmp	Reading_AP3216_ALS	
+		jmp	Reading_AP3216_IR	
+		jmp	Reading_AP3216_PS	
+		jmp 	Next_once_AP3216
+		ret		
+		ret 
+		ret			
+		ret      
+		ret 
+		ret 
+		ret 
+_ex_12c		ret 
+//=============================
+Reading_AP3216_ALS
+	mov	#AP3216C, &Slave_address
+	mov	#AP3216_AlsDataR, &AddrREG       	// ALS
+	call	#USCI_I2C_TxAddr1_RxData2 		// Slave address, AddrREG -> TemporaryREG
+	ret
+Reading_AP3216_IR
+	 	mov	 &TemporaryREG, Rxx5	// ALS
+	mov	#AP3216C, &Slave_address
+	mov	#AP3216_IrDataR, &AddrREG       	// IR
+	call	#USCI_I2C_TxAddr1_RxData2 		// Slave address, AddrREG -> TemporaryREG
+		mov	Rxx5, &DataLight 
+		ret
+Reading_AP3216_PS
+	  	mov	 &TemporaryREG, Rxx5	// IR
+	mov	#AP3216C, &Slave_address
+	mov	#AP3216_PsDataR, &AddrREG       	// PS
+	call	#USCI_I2C_TxAddr1_RxData2 		// Slave address, AddrREG -> TemporaryREG
+		swpb	Rxx5
+		bit	#BIT9, Rxx5
+		rlc	Rxx5
+		bit	#BIT9, Rxx5
+		rlc	Rxx5
+		and	#0x03FF, Rxx5			//10bit
+		mov	Rxx5, &DataIR    
+		ret
+//===============
+Next_once_AP3216	
+	  	mov	 &TemporaryREG+0, Rxx5	// PS
+	mov	#AP3216C, &Slave_address
+	mov	#(0x07<<8)+AP3216_SysConfigR, &AddrREG 	// 111: ALS and PS+IR once - functions active
+	call	#USCI_I2C_Tx2				// Slave address, AddrREG
+		
+		swpb	Rxx5
+		bit	#BITB, Rxx5
+		rlc	Rxx5
+		bit	#BITB, Rxx5
+		rlc	Rxx5
+		bit	#BITB, Rxx5
+		rlc	Rxx5
+		bit	#BITB, Rxx5
+		rlc	Rxx5
+		and	#0x03FF, Rxx5			//10bit
+		mov	Rxx5, &DataPS   
+		ret
+//=============================
+Reading_TMP
+	mov	#TMP75AID, &Slave_address
+	mov	#TMP75_TEMP_REG, &AddrREG
+	call	#USCI_I2C_TxAddr1_RxData2 		// Slave address, AddrREG -> TemporaryREG
+	ret
+//===============
+Calc_TMP	
+   // m_Reset_i2c 
+	  	mov	 &TemporaryREG, Rxx5		// temperature
+	  	swpb	 Rxx5
+	push	SR
+	dint					
+		mov	Rxx5, &MPY               	// reg / 25.6 = 00.0 gr
+		mov	#65536*10/256, &OP2          	
+                mov	&RES1, Rxx5             
+	pop	SR
+		mov	Rxx5, &DataTEMP
+stb_next_once
+	mov	#TMP75AID, &Slave_address
+	mov	#(((CONFIG_DATA|OS|SHUTDOWN)<<8)+TMP75_CONFIG_REG), &AddrREG 	// DATA to CONFIG REG
+	call	#USCI_I2C_Tx2				// Slave address, AddrREG
+	ret
+//=============================
+
+//==============================================================================

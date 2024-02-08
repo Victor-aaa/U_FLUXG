@@ -1,0 +1,162 @@
+//=================================================
+// ==================== MACRO =====================
+/*
+M_GENERATION_BLOCK 	MACRO  _Name, _Ver, _Size 
+_Name                   DS      _Size
+Ver_Name		EQU	_Ver
+Size&&_Name		EQU	_Size
+	  	  	ENDM
+
+*/
+//-------------------		
+m_swap		MACRO  _Reg1, _Reg2  
+		xor	_Reg1, _Reg2 				
+		xor	_Reg2, _Reg1
+		xor	_Reg1, _Reg2 				
+	  	ENDM
+//-------------------		
+m_abs		MACRO  _Reg1  
+		LOCAL _lxxxx 
+		tst	_Reg1
+		jge	_lxxxx
+		inv	_Reg1
+		inc	_Reg1
+_lxxxx	  	
+		ENDM
+//-------------------		
+m_max		MACRO  _Reg1, Reg2  
+		LOCAL _lxxxx 
+		cmp	_Reg1, Reg2
+		jge	_lxxxx
+		mov	_Reg1, Reg2
+_lxxxx	  	
+		ENDM
+//-------------------		
+		
+m_sh8_48bit	MACRO  _Reg1, _Reg2, _Reg3  // signed >> 8
+		swpb	_Reg1
+		mov.b	_Reg1, _Reg1
+		swpb	_Reg2
+		mov	_Reg2, R11
+		and	#0xFF00, R11
+		bis	R11, _Reg1
+		mov.b	_Reg2, _Reg2
+		swpb	_Reg3
+		mov.b	_Reg3, R11
+		and	#0xFF00, _Reg3
+		bis	_Reg3, _Reg2
+		mov	R11, _Reg3
+		sxt	_Reg3
+	  	ENDM
+
+m_sh8_32bit	MACRO  _RegL, _RegH  	// signed >> 8
+		swpb	_RegL
+		mov.b	_RegL, _RegL
+		swpb	_RegH
+		mov	_RegH, R11
+		and	#0xFF00, R11
+		bis	R11, _RegL
+		sxt	_RegH
+	  	ENDM
+
+m_set_sign	MACRO  _Reg, _Sign	// reg, sign
+		LOCAL _lx 
+		clr	_Sign
+		tst	_Reg
+		jge	_lx		// eq  jp
+		mov	#-1, _Sign
+_lx		
+	  	ENDM
+		
+m_saturate16  MACRO val 
+	#if val > 32767
+  DC16 32767
+	#elif val < -32768
+  DC16 -32768
+	#else
+  DC16 val
+	#endif
+	      ENDM		
+
+		
+/*
+//=================================================
+
+M_GPIO5_PULL_DOUN      MACRO		// for LPM2 mode CC2520
+                bis.b	#GPIO5, &P6REN 		// P6 
+	  	ENDM
+
+M_GPIO5_PULL_DOUN_OFF  MACRO		// for LPM2 mode CC2520
+                bic.b	#GPIO5, &P6REN 		// P6 
+	  	ENDM
+
+M_SO_PULL_DOUN         MACRO		// for LPM2 mode CC2520
+                bis.b	#SO, &P4REN        	// P4  
+	  	ENDM
+
+M_SO_PULL_DOUN_OFF     MACRO		// for LPM2 mode CC2520
+                bic.b	#SO, &P4REN        	// P4  
+	  	ENDM
+
+
+//=================================================
+M_TEMPORARY_FUN  	MACRO
+	EVEN
+Prepare_CHAR_GEN
+#ifdef  __CHAR_GEN_I2C__
+	mov	#(end_Tab8x8-AdrTab8x8), R9
+	mov	#AdrTab8x8, R7
+	mov	#AdrTab8x8_I2C, R8	// start addr I2C EEPROM
+	call	#CopyMEM_to_I2C
+	mov	#(end_Tab8x16-AdrTab8x16), R9
+	mov	#AdrTab8x16, R7
+	mov	#AdrTab8x16_I2C, R8	// start addr I2C EEPROM
+	call	#CopyMEM_to_I2C
+#endif
+#ifdef  __LOGO_I2C__		
+	mov	#(end_Logo-Block_Logo), R9
+	mov	#Block_Logo, R7
+	mov	#Block_Logo_I2C, R8	// start addr I2C EEPROM
+	call	#CopyMEM_to_I2C
+#endif		
+#ifdef  __BLOCK_INFO_I2C__  		//   block Info -> EEPROM 	
+	mov	#(SizeBlock_Info), R9
+	mov	#Block_Info, R7
+	mov	#Block_Info_I2C, R8	// start addr I2C EEPROM
+	call	#CopyMEM_to_I2C
+#endif
+	mov	#Prepare_NOPNOP, R8
+	call	#Fun_NOP_to_CALL
+	ret
+//==============
+Fun_NOP_to_CALL	// R8 - fun call 
+	mov	#_nop_, &BufMEM
+	mov	#_nop_, &BufMEM+2
+	mov	#BufMEM, R7
+	mov	#4, R9
+	br	#FR_WRITE	// write @R7 -> @R8 N=R9
+//==============
+CopyMEM_to_I2C	
+	mov	#MAX_PAGE_WRITE_N, R6
+	mov	#1, R5
+	cmp	R6, R9
+	jlo	_cpy_to_I2C
+	mov	R9, R5
+	rram	#4, R5		//  |
+	rram	#2, R5		//  | for MAX_WR_EEPROM  = 64
+	and	#MAX_PAGE_WRITE_N-1, R9	// reminder
+	jz	_cpy_to_I2C_n
+	inc	R5
+	jmp	_cpy_to_I2C
+_cpy_to_I2C_n
+	mov	R6, R9
+_cpy_to_I2C	
+	call	#MEM_I2C_WRITE		// I2C EEPROM WR  @R7->@R8_EEPROM, N=R9  
+	add	R9, R8
+	add	R9, R7
+	dec	R5
+	jnz     _cpy_to_I2C_n
+	ret
+			ENDM
+//=================================================
+*/

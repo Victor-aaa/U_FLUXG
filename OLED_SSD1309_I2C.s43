@@ -1,0 +1,553 @@
+//============================================================================================================
+//                               OLED 128 x 64     SSD1309
+//============================================================================================================
+#ifdef	__LCD_PRESENT__
+
+;-------- *** StatusLCD bits *** -----
+#define KeyBuf_mask	 (0x00FF)	// lo byte - key scrypt
+#define TextSize_0	 (0x0000) 	//
+#define TextSize_1	 (0x0100) 	//
+#define TextSize_2	 (0x0200) 	//
+#define TextSize_3	 (0x0300) 	//
+#define TextSize_4	 (0x0400) 	//
+#define TextSize_5	 (0x0500) 	//
+#define TextSize_6	 (0x0600) 	//
+#define TextSize_7	 (0x0700) 	//
+#define TextSize_mask    TextSize_7 	//
+#define TextMod_0 	 (0x0000) 	//
+#define TextMod_1 	 (0x0800) 	//
+#define TextMod_mask 	 TextMod_1 	//
+#define TextFlash 	 (0x1000) 	//
+#define EndScreen 	 (0x4000) 	//
+;-------------------------------------
+#define BigChar_B	 TextSize_1
+
+ConstLcdX	equ	128
+ConstLcdY	equ	64
+
+//==============================================
+CON_COM	=  0x80		// Contination + C/D
+___COM  =  0x00
+___DAT  =  0x40
+//==============================================
+//==============================================
+DisplayColumnSet:                            	// R12 - Column address  (R11)
+		mov.b	&ColumnAddress, R12     // - column
+		
+//		bit.b	#LCD_ROTATE_B, &C_LCD_FLAGS
+//		jz      e_rotate
+//		add.b	#4, R12		// for rotate Display!!!
+//    e_rotate:	
+		mov.b	R12, R11
+		setc
+		rrc.b   R11
+		clrc
+		rrc.b	R11
+		rra.b	R11
+		rra.b	R11
+		and.b	#0x0F, R12
+DisplayCommand2:			// R11 - low Command, R12 - high	
+	mov.b	R11, &Buf_OLED+1
+	mov.b	R12, &Buf_OLED+2
+	call	#Pause_SLOT_I2C    	// clr RTCIE, wait Rdy  i2c
+	mov	#3, &I2C_TxCnt		// cnt = 3
+	jmp	OLED_I2C_TxnCOM		// Buf_OLED, I2C_TxCnt COMMAND
+//==============
+DisplayCommand:				        // R12 - command
+		mov.b	R12, &Buf_OLED+1
+		call	#Pause_SLOT_I2C    	// clr RTCIE, wait Rdy  i2c
+		mov	#2, &I2C_TxCnt		// cnt = 2
+OLED_I2C_TxnCOM		// Buf_OLED, I2C_TxCnt COMMAND
+		mov.b	#___COM, &Buf_OLED 	// COMMAND
+OLED_I2C_Txn		// Buf_OLED, I2C_TxCnt
+		mov	#Buf_OLED, &I2C_TxPtr
+		mov	#OLED096, &Slave_address
+		mov	#0, &I2C_DataCnt
+		call	#USCI_I2C_TxnPtr	// Slave address, I2C_TxCnt, I2C_TxPtr
+ 		br	#Proceed_SLOT_I2C  	// wait Rdy  i2c, set RTCIE
+//==============
+MEM_I2C_RD8	// AddrMEM -> DataMEM   n=8byte	      
+		call	#Pause_SLOT_I2C    	// clr RTCIE, wait Rdy  i2c
+		mov	#8, &I2C_DataCnt		
+		mov	#AddrMEM+2, &I2C_DataPtr
+	//	br	#MEM_I2C_Rxn		// Addr, I2C_DataCnt, -> @ I2C_DataPtr
+MEM_I2C_Rxn		// Addr, I2C_DataCnt, -> @ I2C_DataPtr
+		swpb	&AddrMEM
+		mov	#2, &I2C_TxCnt
+		mov	#AddrMEM, &I2C_TxPtr
+		mov	#AT24C512, &Slave_address
+		call	#USCI_I2C_TxAddrn_RxDatan // Slave address, I2C_TxCnt, I2C_DataCnt, I2C_DataPtr, I2C_TxPtr
+ 		br	#Proceed_SLOT_I2C  	// wait Rdy  i2c, set RTCIE
+//==============================================
+//==============================================
+Init_OLED
+        	mov   	#20, R12
+        	call    #halMcuWaitUs           //  wait ...
+Init_LCDx:
+/*
+ 		mov.b	#0xA8, R11		// 
+ 		mov.b	#0x3F, R12		// set MUX
+		call	#DisplayCommand2
+
+ 		mov.b	#0xD3, R11		// 
+ 		mov.b	#0x00, R12		// OffSet
+		call	#DisplayCommand2
+		
+		mov.b	#0, R12
+		call	#DisplayStartLineSet	// Line Address 0 to 63
+
+		bit.b	#LCD_ROTATE_B, &C_LCD_FLAGS
+		jz      e_norm
+		call	#SegmentDriverDirectionReverse
+		call	#CommonOutputModeReverse	//Common Output Mode Reverse
+		jmp	e_rote
+  e_norm:
+		call	#SegmentDriverDirectionNormal
+		call	#CommonOutputModeNormal
+  e_rote:		
+		bit.b	#LCD_REVERSE_B, &C_LCD_FLAGS
+		jz      On_Lcd
+		call	#DisplayReverse
+         On_Lcd:
+
+ 		mov.b	#0xDA, R11		// 
+ 		mov.b	#0x02, R12		// COM pins
+		call	#DisplayCommand2
+
+		mov.b	&C_LCD_BRIGHT, R12      // Bright LCD
+		call	#DisplayVolume
+
+		mov.b	#0xA4, R12
+		jmp	DisplayCommand		// Entire Display ON 
+
+		call	#DisplayNormal
+
+ 		mov.b	#0xD5, R11		// 
+ 		mov.b	#0x80, R12		// OSC
+		call	#DisplayCommand2
+		
+		call	#ChargePump_ON		//8D - Charge Pump on SSD1306!!!
+		call	#Display_ON
+		
+        	mov   	#60000, R12
+        	call    #halMcuWaitUs           //  wait ...
+		*/
+
+
+ 		//mov.b	#0xFD, R11		// 
+ 		//mov.b	#0x12, R12		// Unlock
+		//call	#DisplayCommand2
+		
+		call	#Display_OFF
+		
+ 		mov.b	#0x20, R11		// 20 - Set Memory Addressing Mode
+ 		mov.b	#0x02, R12		// 00 - Horizontal Addressing Mode
+		call	#DisplayCommand2
+
+		bit.b	#LCD_ROTATE_B, &C_LCD_FLAGS
+		jnz      e_norm
+		call	#SegmentDriverDirectionReverse
+		call	#CommonOutputModeReverse	//Common Output Mode Reverse
+		jmp	e_rote
+  e_norm:
+		call	#SegmentDriverDirectionNormal
+		call	#CommonOutputModeNormal
+  e_rote:		
+		bit.b	#LCD_REVERSE_B, &C_LCD_FLAGS
+		jz      On_Lcd
+		call	#DisplayReverse
+		
+ 	//	mov.b	#0xD9, R11		
+ 	//	mov.b	#0xD3, R12		// pre-charge period 0x022/f1
+	//	call	#DisplayCommand2
+ 	//	mov.b	#0xDB, R11		
+ 	//	mov.b	#0x20, R12		// vcomh deselect level
+	//	call	#DisplayCommand2
+		
+         On_Lcd:
+	 	call	#ChargePump_ON		//8D - Charge Pump on SSD1306!!!
+		call	#Display_ON
+		
+        //	mov   	#60000, R12
+        //	call    #halMcuWaitUs           //  wait ...
+		
+		mov.b	#0, R12
+		call	#DisplayStartLineSet	// Line Address 0 to 63
+		
+		mov.b	&C_LCD_BRIGHT, R12      // Bright LCD
+		call	#DisplayVolume
+		ret
+//==============================================
+CommonOutputModeNormal:
+		mov.b	#0xC0, R12
+		jmp	DisplayCommand
+SegmentDriverDirectionReverse:
+		mov.b	#0xA1, R12
+		jmp	DisplayCommand
+CommonOutputModeReverse:
+		mov.b	#0xC8, R12
+		jmp	DisplayCommand
+SegmentDriverDirectionNormal:
+		mov.b	#0xA0, R12
+		jmp	DisplayCommand
+
+DisplayNormal:
+		mov.b	#0xA6, R12
+		jmp	DisplayCommand
+DisplayReverse:
+		mov.b	#0xA7, R12
+		jmp	DisplayCommand
+
+
+DisplayStartLineSet:				// Line Address 0 to 63
+		and.b	#0x3F, R12
+		bis.b	#0x40, R12
+		jmp	DisplayCommand
+
+DisplayNextPageSet:				// Page Address 0 to 8
+		mov.b	&PageAddress, R12
+		inc.b	R12
+		jmp	PageSet
+
+DisplayPageSet:					// Page Address 0 to 8
+		mov.b	&PageAddress, R12       // - page
+        PageSet:
+		and.b	#0x07, R12
+		bis.b	#0xB0, R12
+		jmp	DisplayCommand  
+Display_ON:
+		mov.b	#0xAF, R12
+		call	#DisplayCommand
+		bis	#LCD_active_B
+		ret
+Display_OFF:
+		bic	#LCD_active_B
+		mov.b	#0xAE, R12
+		jmp	DisplayCommand
+		
+DisplayVolume:					// R12 - Volume 0 to 255
+		mov.b	#0x81, R11
+		jmp     DisplayCommand2         // R11 - low Command, R12 - high	Command	
+ChargePump_ON		//8D - Charge Pump on SSD1306!!!
+ 		mov.b	#0x8D, R11		// 8D - Charge Pump Setting
+ 		mov.b	#0x14, R12		// 14 - Enable Charge Pump
+		jmp	DisplayCommand2
+//==============================================
+SymbolToLcd:					// R12 - sumbol (R13, R11)
+		rla	R12
+		rla	R12
+		rla	R12				
+		mov	R12, R13                // *8
+		bit	#BigChar_B, &StatusLCD
+ 		jc	Lcd8x16
+	Lcd8x8:
+#ifdef	__CHAR_GEN_I2C__
+		add	#AdrTab8x8_I2C, R13
+#else
+		add	#AdrTab8x8, R13
+#endif		
+		call	#DisplayPageSet		// Page Address 0 to 7
+		jmp	WrLc8B
+	Lcd8x16:
+		rla	R13			// *16
+#ifdef	__CHAR_GEN_I2C__
+		add	#AdrTab8x16_I2C, R13
+#else
+		add	#AdrTab8x16, R13
+#endif		
+		call	#DisplayPageSet		// Page Address 0 to 7 (R12)
+                push.b  &ColumnAddress
+		call	#DisplayColumnSet 	// Column Address 0 to 127 (R12, R11)
+		call	#Write8ByteDPTR      	// R13 ptr, (R11, R12)
+                pop.b   &ColumnAddress
+		call	#DisplayNextPageSet	// Page Address 0 to 7 (R12)
+	WrLc8B:
+		call	#DisplayColumnSet 	// Column Address 0 to 127 (R12, R11)
+		call	#Write8ByteDPTR      	//  R13 ptr, (R11, R12)
+		ret
+//==============================================
+#ifdef	__CHAR_GEN_I2C__
+Write8ByteDPTR: 				//  R13 ptr, (R11, R12)
+//----------------------
+	mov	R13, &AddrMEM 		// Addr MEMORY
+	call	#MEM_I2C_RD8		// AddrMEM -> DataMEM   n=8byte
+//----------------------
+		add	#Size_BufMEM, R13
+		mov	#0, R12
+	LoopWr8:
+		cmp.b	#0xAA, DataMEM(R12)
+		jeq	_wr_screen		// End sumbol!!!
+		bit	#TextFlash, &StatusLCD   // установка, сброс мигания !!!
+		jz     _norm                   
+		bit.b	#0x80, &D_SEC_256        // сброс мигания 
+		jz	_norm
+		clr.b	DataMEM(R12)
+_norm		
+		inc	R12
+		inc.b	&ColumnAddress		// inc Column adress
+		
+		cmp.b	#ConstLcdX, &ColumnAddress 	// end Screen?
+		jlo	_in_screen			// Yes
+_end_screen	
+		bis	#EndScreen, &StatusLCD
+		jmp	_wr_screen
+_in_screen
+		cmp	#8, R12	
+		jlo	LoopWr8
+_wr_screen
+//----------------------
+	inc	R12                             // cnt +1
+	call	#Pause_SLOT_I2C    // clr RTCIE, wait Rdy  i2c
+	mov.b	#___DAT, &Buf_OLED 		// DATA
+	mov	R12, &I2C_TxCnt			// cnt +1
+	call	#OLED_I2C_Txn	// Buf_OLED, I2C_TxCnt
+//----------------------
+Ex001           ret
+
+#else
+Write8ByteDPTR: 				//  R13 ptr, (R11, R12)
+		push	R14
+		clr	R14
+		mov	#8, R11
+	LoopWr8:
+		mov.b	@R13+, R12
+		cmp.b	#0xAA, R12
+		jeq	_end_symbol
+		cmp.b	#ConstLcdX, &ColumnAddress 	// end Screen?
+		jhs	_end_screen			// Yes
+WrLcdByte:
+		bit	#TextFlash, &StatusLCD   // установка, сброс мигания !!!
+		jz     _norm                   
+		bit.b	#0x80, &D_SEC_256        // сброс мигания 
+		jz	_norm
+		clr.b	R12
+_norm		
+      		mov.b   R12, Buf_OLED+1(R14) // buffer I2C
+		inc	R14
+		
+		inc.b	&ColumnAddress		// inc Column adress
+		dec	R11
+		jnz	LoopWr8  
+ExL8
+//----------------------
+	inc	R14                             // cnt +1
+	call	#Pause_SLOT_I2C    // clr RTCIE, wait Rdy  i2c
+	mov.b	#___DAT, &Buf_OLED 		// DATA
+	mov	R14, &I2C_TxCnt			// cnt +1
+	call	#OLED_I2C_Txn	// Buf_OLED, I2C_TxCnt
+//----------------------
+		pop	R14
+Ex001           ret
+//--------
+_end_screen	bis	#EndScreen, &StatusLCD
+_end_symbol	dec	R11
+		add	R11, R13		// pozition to next sumbol!!!
+		jmp	ExL8
+#endif		
+//==============================================
+//==============================================
+StringToLCD:                                    // *R12 - string (R11, R13)
+		mov	R12, R15
+		cmp.b	#'~', 0(R12)
+		jne     StrToLCD
+		xor	#TextFlash, &StatusLCD   // установка, сброс мигания !!!
+		inc	R15
+StrToLCD:		
+		bit	#EndScreen, &StatusLCD
+		jnz	Ex_STL
+		mov.b	@R15+, R12
+		tst.b	R12
+		jz	Ex_STL
+		cmp.b	#LF, R12
+		jeq	Ex_STL
+		//cmp.b	#CR, R12
+		//jeq	Ex_STL
+		call	#SymbolToLcd 		// R12 - sumbol (R13, R11)
+		jmp	StrToLCD
+Ex_STL
+		bic	#TextFlash|EndScreen, &StatusLCD   // сброс мигания & end screen !!!
+		mov	R15, R12
+ex_lcd:		ret
+//==============================================
+/*
+BmpLogoToLCD
+		mov	#Block_Logo-ConstLcdX/8, R15
+		mov	#ConstLcdX/8, R13
+		mov.b	#ConstLcdY/8, &PageAddress     	// - page
+	l_b_a:	
+		dec.b	&PageAddress         	// - page
+		jn	ex_lcd
+		mov     R13, R10
+		mov.b	#0, &ColumnAddress
+		call	#DisplayColumnSet 	// Column Address 0 to 127
+		call	#DisplayPageSet		// Page Address 0 to 8
+	l_b_b:	
+	clr	R11			// ptr=0
+		mov	#BIT7, R14	
+	l_b_c:	
+		mov	#1, R12
+	l_b_t:	
+		add	R13, R15
+		bit.b	R14, 0(R15)
+		rlc.b	R12
+		jnc	l_b_t
+		inv.b	R12
+	mov.b   R12, Buf_OLED+1(R11)	// buffer I2C
+	inc     R11			// ptr+1
+		sub	#ConstLcdX, R15
+		rra	R14		
+		jnc	l_b_c
+//------ wr 8 byte -----
+	call	#Pause_SLOT_I2C    	// clr RTCIE, wait Rdy  i2c
+	mov.b	#___DAT, &Buf_OLED 	// DATA  DC=1
+	mov	#9, &I2C_TxCnt		// cnt 
+	call	#OLED_I2C_Txn		// Buf_OLED, I2C_TxCnt
+//----------------------
+		inc	R15
+		dec	R10
+		jnz     l_b_b
+	
+		add	#ConstLcdX-ConstLcdX/8, R15
+		jmp	l_b_a
+*/		
+//======================
+#ifdef	__LOGO_I2C__
+LogoToLCD
+		mov	#Block_Logo_I2C, R15
+LogoToLCD_fromI2C:	// I2C EEPROM  @R15->  I2C OLED
+		mov.b	#0, &PageAddress	// - page
+  LoopRomLcd:
+		mov.b	#0, &ColumnAddress
+		call	#DisplayColumnSet 	; Column Address 0 to 127
+		call	#DisplayPageSet		; Page Address 0 to 7
+		mov	#ConstLcdX/Size_BufMEM, R14
+		clr	R13			// ptr=0
+  loopWrxLcd:
+//----------------------
+	mov	R15, &AddrMEM 		// Addr MEMORY
+	call	#MEM_I2C_RD8		// AddrMEM -> DataMEM   n=8byte
+		add	#Size_BufMEM, R15
+//----------------------
+	call	#Pause_SLOT_I2C    	// clr RTCIE, wait Rdy  i2c
+	mov.b	#___DAT, &Buf_OLED 	// DATA  DC=1
+	mov	#Size_BufMEM+1, &I2C_TxCnt	// cnt+1 
+	call	#OLED_I2C_Txn		// Buf_OLED, I2C_TxCnt
+//----------------------
+_nxt_l_bb	dec	R14
+		jnz	loopWrxLcd
+		inc.b	&PageAddress                    // - page
+		cmp.b	#(ConstLcdY/8), &PageAddress	// - page
+		jne	LoopRomLcd
+		ret
+#else
+LogoToLCD:	// FRAM @R15 ->  I2C OLED
+		mov	#Block_Logo, R15
+		mov.b	#0, &PageAddress	// - page
+  LoopRomLcd:
+		mov.b	#0, &ColumnAddress
+		call	#DisplayColumnSet 	; Column Address 0 to 127
+		call	#DisplayPageSet		; Page Address 0 to 7
+		mov	#ConstLcdX, R14
+		clr	R13			// ptr=0
+  loopWrxLcd:
+	    mov.b  @R15+, Buf_OLED+1(R13)	// buffer I2C
+	    inc	   R13				// ptr+1
+	    cmp	   #8, R13
+	    jne	   _nxt_l_bb
+//----------------------
+	inc	R13                             // cnt+1
+	call	#Pause_SLOT_I2C    // clr RTCIE, wait Rdy  i2c
+	mov.b	#___DAT, &Buf_OLED 		// DATA  DC=1
+	mov	R13, &I2C_TxCnt			// cnt+1 
+	call	#OLED_I2C_Txn		// Buf_OLED, I2C_TxCnt
+//----------------------
+	clr	R13				// ptr=0
+_nxt_l_bb
+		dec	R14
+		jnz	loopWrxLcd
+		inc.b	&PageAddress                    // - page
+		cmp.b	#(ConstLcdY/8), &PageAddress	// - page
+		jne	LoopRomLcd
+		ret
+#endif
+//==============================================
+Const_ClrLcd  = 0
+ClrLcdScript
+ClrLcd:                                         // IIC  - 25mS
+		mov.b	#0, &PageAddress	// - page
+		mov.b	#0, &ColumnAddress
+  LoopClrLcd:
+		call	#DisplayColumnSet 	// (R12, R11) Column Address 0 to 127
+		call	#DisplayPageSet		// (R12)      Page Address 0 to 8
+//----------------------
+	call	#Pause_SLOT_I2C    	// clr RTCIE, wait Rdy  i2c
+	mov.b	#___DAT, &Buf_OLED 		// DATA
+      	mov.b   #Const_ClrLcd, &Buf_OLED+2      // const Fill
+	mov	#ConstLcdX+1, &I2C_TxCnt	// cnt
+	bis	#I2C_Fill_B			// Fill mode
+	call	#OLED_I2C_Txn		// Buf_OLED, I2C_TxCnt
+//----------------------
+		inc.b	&PageAddress                    // - page
+		cmp.b	#(ConstLcdY/8), &PageAddress	// - page
+		jne	LoopClrLcd
+		ret
+//==============================================
+//==============================================
+/*
+Str_ManufactureID:	DB	'Manufacture:  ',0
+Str_NetworkID:		DB	'Network ID:     ',0
+Str_CustomerNo:		DB	'Customer:    ',0
+Str_SerialNo:		DB	'Serial:  ',0
+Str_Time:		DB	'Time:       ',0
+Str_Date:		DB	'Date:   ',0
+Str_Calibration_Mode:	DB	'Calibration Mode',0
+Str_Battery:		DB	'Battery:  ',0
+Str_Normal:		DB	'Normal',0
+Str_Error:		DB	'Error',0,0
+*/
+
+web_	DB	' hydrograph.com.ua ', 0
+//web_	DB	' www.dmc.com.ua', 0
+	EVEN
+//==============================================
+Wait_ToLCD:
+		mov	#web_, R12
+		
+		mov.b	#7, &PageAddress	; Page Address
+		mov.b	#1, &ColumnAddress	; Column Adress
+		mov	#0, &StatusLCD
+		call	#StringToLCD		; string to LCD
+	//	call	#ClrLineToEnd	        ; Clr line to End
+Ex_upd_lcd:	ret
+//==============================================
+SUMB_TO_LCD	
+		push	R11
+		push	R12
+		push	R13
+		mov.b	R9, R12
+		call	#SymbolToLcd 		// R12 - sumbol (R13, R11)
+		pop	R13
+		pop	R12
+		pop	R11
+		ret
+//==============================================  
+//==============================================  
+//==============================================  
+
+/*
+	EVEN
+AdrTab8x8
+#include "8X8X.inc"            			; #define controlled include file 
+
+	EVEN
+AdrTab8x16
+#include "8x16x.inc"            			; #define controlled include file 
+
+	EVEN
+Block_Logo
+#include "zigbee22_.inc"            			; #define controlled include file 
+	EVEN
+*/
+
+
+#endif

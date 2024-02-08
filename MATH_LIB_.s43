@@ -1,0 +1,535 @@
+//************************* MATH LIB L1 ****************************************
+//==============================================================================
+TabX	DW	0x0000
+Tab2X	DW	0x0001,0x0003,0x0007,0x000F,0x001F,0x003F,0x007F,0x00FF
+	DW	0x01FF,0x03FF,0x07FF,0x0FFF,0x1FFF,0x3FFF,0x7FFF,0xFFFF
+	
+Tab2BIT	DW	0x0001,0x0002,0x0004,0x0008,0x0010,0x0020,0x0040,0x0080
+	DW	0x0100,0x0200,0x0400,0x0800,0x1000,0x2000,0x4000,0x8000
+//==============================================================================
+//==============================================================================
+ #ifdef  __MSP430_HAS_MPY__
+MUL16S_                                 //R11*R10=R8.R9 signed mul
+                dint
+		nop
+		mov 	R11, &MPYS 	// Load first operand
+		mov 	R10, &OP2 	// Load 2nd operand
+	//	nop                     // надо при косвенном обращении
+		mov	&RESLO, R9
+		mov	&RESHI, R8
+		eint
+		ret
+ #else
+    #ifdef  MUL_X_
+MUL16S_   					        //R11*R10=R8.R9 signed mul - 150 cycles
+		push	MLTPLR_HW_
+		tst	MUL_X_		                // op1 -ve?
+		jge	convPoz
+		inv	MUL_X_		                // make irop1 to +ve by transfering the -ve to irop2l
+		inc	MUL_X_
+		inv	MUL_Y_
+		inc	MUL_Y_
+	convPoz:
+		clr	MRESLT_LW_
+		clr	MRESLT_HW_
+
+		tst	MUL_Y_
+		jge	MAC16_				// op2 -ve?
+		mov	#0ffffh, MLTPLR_HW_	        // assume op2 -ve and do a sign extend first
+                jmp     LL$02_	
+MAC16_	                                                // 140 cycles
+		clr	MLTPLR_HW_
+LL$02_		rra	MUL_X_			
+		jnc	LL$01_
+		add	MUL_Y_, MRESLT_LW_
+		addc	MLTPLR_HW_, MRESLT_HW_
+LL$01_		rla	MUL_Y_
+		rlc	MLTPLR_HW_
+		tst	MUL_X_		
+        	jnz	LL$02_
+		pop	MLTPLR_HW_
+                ret
+   #endif	
+ #endif	
+
+MPY10 	push	R13             // R12*10 => R12
+	RLA 	R12 		; NO, MULTIPLICATION WITH 10
+	MOV 	R12,R13 	; DOUBLED VALUE
+	RLA 	R12
+	RLA 	R12
+	ADD 	R13,R12 	; VALUE X 8
+	pop	R13
+        RET
+	
+/*
+;******************************************************************************
+;Подпрограмма деления 32-битного числа на 16-битное
+;входные данные 32-бит htX100_msw & htX100_lsw и 16-битная константа #06,
+; на выходе 16-битная переменная DIGIT
+; По выходу: CARRY = 0: OK, CARRY = 1: Частное > 16 Бит
+//  R13,R12 / R14 -> R12 rem.R13
+;******************************************************************************
+#define IRBT            R11
+#define htX100_lsw      R12
+#define htX100_msw      R13
+#define Divizor         R14
+#define DIGITS          R15
+DIV32                   //  R13,R12 / R14 -> R12.R13
+           clr.w DIGITS                ; Очистка буфера для нового результата
+           mov.w #17,IRBT              ; Организация цикла
+div1       cmp.w Divizor,htX100_msw    ; Сравнить делитель со старшим словом делимого
+           jlo   div2                  ; Если меньше – переход на div2
+           sub.w Divizor,htX100_msw    ; Вычесть делитель из старшего слова
+div2       rlc.w DIGITS                ; Сдвинуть результат влево через бит переноса
+           jc    div4                  ; Если в carry “1”, то завершаем
+           dec.w IRBT                  ; Декремент счётчика цикла
+           jz    div3                  ; Если счётчик = 0 : завершение
+           rla.w htX100_lsw            ; Делимое X 2
+           rlc.w htX100_msw            ;
+           jnc   div1                  ; Если в carry «0» переход к div1
+           sub.w Divizor,htX100_msw    ; Вычесть делитель из старшего слова
+           setc                        ; Установить carry в «1»
+           jmp   div2                  ; Повтор
+div3       clrc                        ; Очистить  carry
+div4       mov  DIGITS, R12
+           ret                         ; Возврат из подпрограммы
+	
+*/
+; EXECUTION CYCLES FOR REGISTER CONTENTS (without CALL):
+;DIVIDE CYCLES EXAMPLE
+;–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+; 242 0xxxxxxxxh : 00000h = 0FFFFh      C = 1
+; 237 03A763E02h : 05A5Ah = 0A5A5h      C = 0
+; 240 0FFFE0001h : 0FFFFh = 0FFFFh      C = 0
+;
+; USED REGISTERS IROP1, IROP2L, IRACL, IRBT, IROP2M
+;
+; UNSIGNED DIVISION SUBROUTINE 32–BIT BY 16–BIT
+; IROP2M|IROP2L : IROP1 –> IROP2L   REMAINDER IN IROP2M
+; RETURN: CARRY = 0: OK    CARRY = 1: QUOTIENT > 16 BITS
+;
+#define IRBT            R11
+#define htX100_lsw      R12
+#define htX100_msw      R13
+#define Divizor         R14
+#define DIGITS          R15
+
+#define IROP2L		htX100_lsw
+#define IROP2M		htX100_msw
+#define IROP1		Divizor
+#define IRACL		DIGITS
+
+DIV32                   //  R13,R12 / R14 -> R12.R13
+DIVIDE 		CLR  IRACL 	; CLEAR RESULT
+		MOV  #17,IRBT 	; INITIALIZE LOOP COUNTER
+DIV1 		CMP  IROP1,IROP2M
+		JLO  DIV2
+		SUB  IROP1,IROP2M
+DIV2 		RLC  IRACL
+		JC   DIV4 	; Error: result > 16 bits
+		DEC  IRBT 	; Decrement loop counter
+		JZ   DIV3 	; Is 0: terminate w/o error
+		RLA  IROP2L
+		RLC  IROP2M
+		JNC  DIV1
+		SUB  IROP1,IROP2M
+		SETC
+		JMP  DIV2
+DIV3 		CLRC 		; No error, C = 0
+DIV4 		mov  IRACL, IROP2L
+		RET 		; Error indication in C
+
+;–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+; EXECUTION CYCLES FOR REGISTER CONTENTS (without CALL):
+;DIVIDE CYCLES EXAMPLE
+;–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+; 15  0xxxxxxxxh : 00000h = 0yyyyh      C = 1
+; 268 0E01C3E02h : 05A5Ah = 0A5A5h      C = 0
+; 258 000000001h : 0FFFFh = 0FFFFh      C = 0
+;
+; USED REGISTERS IROP1, IROP2L, IROP2M, IRACL, IRACM
+;
+; SIGNED DIVISION SUBROUTINE 32–BIT BY 16–BIT
+; IROP2M|IROP2L : IROP1 –> IROP2L   REMAINDER IN IROP2M
+; RETURN: CARRY = 0: OK    CARRY = 1: QUOTIENT > 16 BITS
+;
+#define IRACM		R10
+
+DIVS32                   //  R13,R12 / R14 -> R12.R13
+		push	IRACM
+_DIVS 		CLR  IRACM 	; Sign of result
+		TST  IROP2M 	; Check sign of dividend
+		JGE  _DIVS1
+		INV  IROP2M 	; Is neg.: |dividend|
+		INV  IROP2L
+		INC  IROP2L
+		ADC  IROP2M
+		INV  IRACM 	; Invert sign of result
+_DIVS1 		TST  IROP1 	; Check sign of divisor. C =
+		JEQ  _DIVSERR 	; Divisor is 0: error. C = 1
+		JGE  _DIVS2 	; Sign is neg.: |divisor|
+		INV  IROP1	
+		INC  IROP1
+		INV  IRACM 	; Invert sign of result
+_DIVS2 		CALL #DIVIDE 	; Call unsigned division
+		JC   _DIVSERR 	; C = 1: error
+		TST  IRACM 	; Test sign of result
+		JZ   _DIVS3
+		INV  IROP2L 	; Is neg.: negate result
+		INC  IROP2L
+_DIVS3 		CLRC 		; No error occured: C = 0
+_DIVSERR 	pop	IRACM
+		RET 		; Error: C = 1	
+		
+//==============================================================================
+#ifdef  __DIV64__
+// UNSIGNED DIVISION SUBROUTINE 64–BIT BY 32–BIT
+// IROP2G|IROP2H|IROP2M|IROP2L : IROP1M|IROP1L –> IROP2M|IROP2L  REM -> IROP2G|IROP2H
+// RETURN: CARRY = 0: OK    CARRY = 1: QUOTIENT > 32 BITS
+//==============================================================================
+#define _IROP2L		R12
+#define _IROP2M		R13
+#define _IROP2H		R14
+#define _IROP2G		R15
+#define _IROP1L		R10 	//Divizor L
+#define _IROP1M		R11    	//Divizor M
+#define _IRACL		R8
+#define _IRACM		R9
+#define _IRBT           R7
+DIV64_32                   // R15.R14.R13.R12 / R11.R10 -> R13.R12 rem R15,R14
+DIVIDE_64	CLR  _IRACL 		// Очистка буфера для нового результата
+                CLR  _IRACM 		
+		MOV  #33, _IRBT 	// Организация цикла
+		
+DIV1_64 	CMP  _IROP1M, _IROP2G   // Если меньше – переход на div2
+		JLO  DIV2_64
+		JNE  DIV2_64x
+		CMP  _IROP1L, _IROP2H
+		JLO  DIV2_64
+DIV2_64x		
+		SUB  _IROP1L, _IROP2H   // Вычесть делитель из старшего слова
+		SUBC _IROP1M, _IROP2G
+DIV2_64 	RLC  _IRACL             // Сдвинуть результат влево через бит переноса
+		RLC  _IRACM
+		JC   DIV4_64		// Если в carry “1”, то завершаемError: result > 32 bits
+		DEC  _IRBT 		// Декремент счётчика цикла
+		JZ   DIV3_64 		// Если счётчик = 0 : завершение
+		RLA  _IROP2L            // Делимое X 2
+		RLC  _IROP2M
+		RLC  _IROP2H
+		RLC  _IROP2G
+		JNC  DIV1_64            // Если в carry «0» переход к div1
+		SUB  _IROP1L, _IROP2H   // Вычесть делитель из старшего слова
+		SUBC _IROP1M, _IROP2G
+		SETC                    // Установить carry в «1»
+		JMP  DIV2_64            // Повтор
+DIV3_64 	CLRC 			// Очистить  carry, No error, C = 0
+DIV4_64 	
+		mov  _IRACL, _IROP2L
+		mov  _IRACM, _IROP2M
+		RET 			// Error indication in C
+#endif		
+//==============================================================================
+	
+;***************************************************************************
+#ifdef	PID_regulator
+
+#define	I_ERR_MAX	1000	
+
+ #ifdef  __MSP430_HAS_MPY__
+PID_32			// R12 - delta_err, R13 - pConstPIDx, R14 - pPIDx_P, out R12 - new value
+		tst	R12
+		jz      Ex_pid32
+	//	DINT
+	//	nop	
+_P_	
+		mov 	R12, &MPYS 		// Load first operand => delta_err
+		mov 	0(R13), &OP2		// Load 2nd operand => Pconst
+_I_	
+		add	R12, 0(R14)   		// I_err
+		bit	#V, SR                  // overflow?
+		jz	_i_err_tst              // no
+		tst	R12                     // yes
+		jn      _i_err_min
+_i_err_max		
+		mov	#I_ERR_MAX, 0(R14)    	// ... I_err = I_err max
+		jmp	_i_err_ok
+_i_err_min		
+		mov	#-I_ERR_MAX, 0(R14)	// ... I_err = I_err min
+		jmp	_i_err_ok
+_i_err_tst		
+		cmp	#-I_ERR_MAX, 0(R14)	// ... если I_err < I_err min => I_err = I_err min
+		jl	_i_err_min
+		cmp	#I_ERR_MAX, 0(R14)      // ... если I_err > I_err max => I_err = I_err max
+		jge	_i_err_max
+_i_err_ok		
+		mov 	0(R14), &MACS 		// Load first operand => I_err
+		mov 	2(R13), &OP2		// Load 2nd operand => Iconst
+_D_		
+		mov	R12, &MACS              // Dadd - delta_err
+		sub 	2(R14), &MACS 		// Load first operand => (delta_err - prev. delta_err)
+		mov 	4(R13), &OP2		// Load 2nd operand - Dconst
+		mov	R12, 2(R14)		// set current Delta -> Preview delta_err
+SumPIDx         				
+	//	add	4(R14), &RESLO 		// add reminder
+	//	addc	6(R14), &RESHI 		// add reminder
+	//	mov	&RESLO,  4(R14)         // reminder => 4(R14)
+	//	mov	&SUMEXT, 6(R14)         // sign reminder => 6(R14)  
+		
+		mov     &RESHI, R12             // out R12 - new value
+                bit     #BITF, R12
+                jz      Ex_pid32
+                inc     R12
+	//	EINT
+Ex_pid32:	ret
+
+PidInitalize    	  		// R14 - pPIDx_P
+		clr	0(R14)
+		clr	2(R14)
+		clr	4(R14)
+		clr	6(R14)
+		ret
+//=======================================================================		
+ #else
+#define	I_ERR_MAX	1000	
+PIDx			// R12 - delta value, R13 - pConstPIDx, R14 - pPIDx_P, out R12 - new value
+		tst	R12
+		jz      Ex_pid16
+		rla	R12
+		rla	R12
+		rla	R12			// delta value * 8
+_P_	
+                mov	R12, MUL_X_
+		mov	@R13+, MUL_Y_
+                call    #MUL16S_	        // signed mul - 150 cycles
+		mov	MRESLT_HW_, 4(R14) 	// P
+_I_	
+		add	R12, 0(R14)   		// I_err
+		bit	#V, SR                  // overflow?
+		jz	_i_err_tst              // no
+		tst	R12                     // yes
+		jn      _i_err_min
+_i_err_max		
+		mov	#I_ERR_MAX, 0(R14)    	// ... I_err = I_err max
+		jmp	_i_err_ok
+_i_err_min		
+		mov	#-I_ERR_MAX, 0(R14)	// ... I_err = I_err min
+		jmp	_i_err_ok
+_i_err_tst		
+		cmp	#-I_ERR_MAX, 0(R14)	// ... если I_err < I_err min => I_err = I_err min
+		jl	_i_err_min
+		cmp	#I_ERR_MAX, 0(R14)      // ... если I_err > I_err max => I_err = I_err max
+		jge	_i_err_max
+_i_err_ok		
+                mov	0(R14), MUL_X_
+		mov	@R13+, MUL_Y_
+                call    #MUL16S_	        // signed mul - 150 cycles
+		add	MRESLT_HW_, 4(R14)  	// I
+_D_		
+		mov	R12, MUL_X_
+		sub	2(R14), MUL_X_          // (delta_err - prev. delta_err)
+		mov	@R13+, MUL_Y_
+                call    #MUL16S_	        // signed mul - 150 cycles
+		add	MRESLT_HW_, 4(R14)  	// D
+		mov	R12, 2(R14)		// set current Delta -> Preview Delta
+SumPIDx         				// R14 - pPIDx_P, R12 - result
+		tst     0(R14)
+	//	jn      ClrPID
+		clrc
+		rrc	R12
+		rra	R12
+		rra	R12			// value for DA1 / 8
+Ex_pid16        clrc                            // Ok value !
+		ret
+		
+PidInitalize    	  		// R14 - pPIDx_P
+		clr	0(R14)
+		clr	2(R14)
+		clr	4(R14)
+		ret
+  #endif		
+#endif		
+//===========================================================================================
+; The packed BCD number contained in R4 is converted to a binary
+; number contained in R5
+;
+BCDBIN 	MOV #4,R8 	; LOOP COUNTER ( 4 DIGITS )
+	CLR R5
+	CLR R6
+SHFT4 	RLA R4 		; SHIFT LEFT DIGIT INTO R6
+	RLC R6 		; THROUGH CARRY
+	RLA R4
+	RLC R6
+	RLA R4
+	RLC R6
+	RLA R4
+	RLC R6
+	ADD R6,R5 	; XN+10XN+1
+	CLR R6
+	DEC R8 		; THROUGH ?
+	JZ _END 	; YES
+
+MPYx10 	RLA R5 		; NO, MULTIPLICATION WITH 10
+	MOV R5,R7 	; DOUBLED VALUE
+	RLA R5
+	RLA R5
+	ADD R7,R5 	; VALUE X 8
+	JMP SHFT4 	; NEXT DIGIT
+_END 	RET 		; RESULT IS IN R5
+
+
+
+HEXBIN
+	cmp.b	#'A', R4
+	jlo     _eend
+	add.b	#9, R4
+_eend	and.b	#0x0F, R4
+        ret
+//===========================================================================================
+
+#define src_Lo  R12
+#define src_Hi  R13
+#define dst_    R14
+#define wrk_    R15
+SQRT		// R13.R12 => R14    390 cycles
+		mov	#0x8000, dst_	
+		mov	dst_, wrk_
+_l_sqr
+	     push	SR
+             dint
+		nop
+		mov	dst_, &MPY          // if((long)dst*dst>src) dst &= ~wrk;
+		mov	dst_, &OP2
+	        cmp     &RESHI, src_Hi
+		jlo     _lo_sqr
+		jne     _hi_sqr
+	        cmp     &RESLO, src_Lo
+		jhs     _hi_sqr
+_lo_sqr	
+	        bic	wrk_, dst_	
+_hi_sqr	
+	     pop	SR
+	        clrc
+		rrc	wrk_		//  wrk >>= 1;    !! или rra!
+		bis	wrk_, dst_      //  dst |= wrk;
+		jnc	_l_sqr
+	        ret
+/*		
+Да вот это на арме летает просто!!!					
+проверено в сравнении с sqrt на округление до 1650503060 все ок.					
+unsigned int isqrt2(unsigned long src) - здесь время константное. самый быстрый что я пробовал метод					
+{					
+    unsigned long wrk;					
+    unsigned int dst;					
+    int i;					
+    dst = 0x8000;					
+    wrk = 0x8000;					
+    for(i=0; i<16; i++)					
+    {					
+         if((long)dst*dst>src) dst &= ~wrk;					
+         wrk >>= 1;					
+         dst |= wrk;					
+    }					
+    return dst;					
+}					
+*/		
+//===========================================================================================
+/*
+#ifdef  __ATAN__
+#define  _I_ R12
+#define  _Q_ R13
+#define  Nquad R9
+// 1-8 => IQ(I^2+0.28125Q^2)
+// 2-3 => pi/2-IQ(I^2+0.28125Q^2)
+// 4-5 => pi+IQ(I^2+0.28125Q^2)
+// 6-7 => -pi/2-IQ(I^2+0.28125Q^2)
+_ATAN_	// 0-359 => 0-511	
+// для определения октанта - проверить знаки I, Q и условие |Q|>|I|
+             dint
+		nop	
+		mov	_Q_, &MPYS   	
+		mov	_Q_, &OP2       // Q^2
+		mov	&RES0, &MPYS32L
+		mov	&RES1, &MPYS32H
+		mov	#18432, &OP2   	// Q^2*0.28125
+		mov	#0, &MACS32L   	
+		mov	_I_, &MACS32H   	
+		mov	_I_, &OP2  	// Q^2*0.28125+I^2
+		nop
+		nop
+		mov	&RES1, R10
+		mov	&RES2, R11
+		mov	_I_, &MACS   	
+		mov	_Q_, &OP2  	// I*Q
+		mov	&RES0, &MPYS32L
+		mov	&RES1, &MPYS32H
+		mov	#31937, &OP2L  	
+		mov	#81, &OP2H  	// I*Q*81.4873
+		nop
+		nop
+		mov	&RES1, R12
+		mov	&RES2, R13
+		mov	&RES3, R14	// sign
+		mov	R14, R15      // sign
+             eint
+		call	#DIV64_32       // R15.R14.R13.R12 / R11.R10 -> R13.R12 rem R15,R14
+		
+		clr	Nquad
+		bit	#BITF, _Q_
+		jz      _rq__
+		inv     _Q_
+		inc     _Q_
+	_rq__:	rlc	Nquad
+		bit	#BITF, _I_
+		jz      _ri__
+		inv     _I_
+		inc     _I_
+	_ri__:	rlc	Nquad
+		cmp	_I_, _Q_
+		rlc	Nquad 	// Nquad = [0-7]
+		
+		ret   // R12 = 0-511 = 0-359
+#endif		
+*/
+//===========================================================================================
+#define  Im  	R12
+#define  Re  	R13
+
+VECTOR_MAGNITUDE_APPROXIMATION  // приближенно => sqrt(Re^2+Im^2) = Max*0.96043387+Min*0.397824735
+#define	__alfa  (62943)		// 0.96043387*65536
+#define	__beta  (26072)		// 0.397824735*65536
+ //extern	Re
+ //extern Im
+ 		mov	Im, R14
+		mov	Re, R15
+		m_abs	R14
+ 		m_abs	R15
+		cmp	R15, R14
+	//     push	SR
+        //     dint
+		jhs	__ba
+		mov	R15, &MPY	// 
+		mov 	#__alfa, &OP2 	// Max*0.96043387			
+		mov	R14, &MAC	// + 
+		mov 	#__beta, &OP2 	// Min*0.397824735
+		jmp	__ex_ab
+__ba		
+		mov	R14, &MPY	// 
+		mov 	#__alfa, &OP2 	// Max*0.96043387			
+		mov	R15, &MAC	// + 
+		mov 	#__beta, &OP2 	// Min*0.397824735
+__ex_ab		
+		mov	&RES1, R14	// sqrt(Re^2+Im^2)
+	//     pop	SR
+	     ret
+
+//===========================================================================================
+		
+		
+		
+		
+		
+		
+		
+		
+		

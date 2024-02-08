@@ -1,0 +1,411 @@
+//==============================================================================
+//==============================================================================
+ServiceCommand
+                tst	&app_CtrlFlags
+		jz      _ex_serv_com
+		mov.b	&app_CtrlFlags+0, R12	// lo - command
+		mov.b	&app_CtrlFlags+1, R13   // hi - params
+//--------------		
+_TST_002
+		cmp.b	#COM_CALIB_ZERO, R12
+		jne	_TST_003
+		// Wait ready
+		call	#CALIB_ZERO		// Calibration Zero
+		jmp     _ex_clr_com
+_TST_003
+		cmp.b	#COM_CALIB_POINT, R12
+		jne	_TST_004
+		// Wait ready
+		call	#CALIB_POINT		// Calibration Point
+		jmp     _ex_clr_com
+_TST_004
+//--------------		
+_TST_005
+		cmp.b	#COM_POWER_MODE, R12
+		jne	_TST_006
+		call	#TEST_STATE_STM         // разрешенные состояния для изменения!
+		jne     _ex_serv_com
+		bit	#BIT0, R13		// hi - 0-Activ, 1-PD
+		jnz	__pd
+		bic	#PD_Req_B		// Power request..
+		jmp     _ex_clr_com
+	__pd:	
+		bis	#PD_Req_B		// Power Save request..
+		jmp     _ex_clr_com
+//--------------		
+_TST_006
+		cmp.b	#COM_RST_FLUXG, R12  	// lo - command=20  hi - param
+		jne	_TST_007
+		call 	#_RST_Master
+		jmp     _ex_clr_com
+_TST_007
+_TST_008
+		cmp.b	#COM_RST_CNT, R12  // lo - command  hi - param
+		jne	_TST_009
+		clr	&st_CntErrPack  	
+		clr	&st_CntResivPac	
+		clr	&st_CntTrxPac	
+		clr	&st_CntAdcOvfl
+		clr	&st_CntReset
+		clr	&TINYRAM_START+2	// tiny RAM cnt RESET
+		jmp     _ex_clr_com
+//--------------		
+_TST_009
+//--------------		
+_TST_010
+_TST_011		
+		cmp.b	#COM_SCRYPT, R12  	// lo - command  
+		jne	_TST_012
+		bit	#BIT0, R13		// hi - 0-stop, 1-start
+		jnz	__scr
+		bic	#StopScript_B, &StatusAPP
+		jmp     _ex_clr_com
+	__scr:	
+		bis	#StopScript_B, &StatusAPP
+		jmp     _ex_clr_com
+//--------------		
+_TST_012		
+		
+		// ...
+_ex_clr_com
+           	clr	&app_CtrlFlags
+_ex_serv_com	ret
+//==============================================================================
+TEST_HW_PRESENT
+//==============================================================================
+#define TMP75AID  0x48  // st_TMP_B
+AT24C512  =  0x50  	// st_EEPROM_B
+#define ST25DV04  0x53  // 0x53, 0x57  st_NFC_B
+#define OLED096   0x3C  // 0x78, 0x7A  st_LCD_B
+
+#ifdef  __DEBUG_MODE__
+CriticalVIN_LOW = 0   	// 0.0v
+#else
+CriticalVIN_LOW = 50   	// 5.0v
+#endif
+
+#define MS5837_30BA 0x76 // 0x76 (1110110 b)
+//==============================================================================
+PollDevicePresent	// test device, set st_Periperal
+	bic	#st_TMP_B|st_EEPROM_B|st_NFC_B|st_LCD_B|st_PS_B|st_PSEX_B|st_ADC24_B, &st_Periperal
+	clr	R13
+	mov	#TMP75AID, R12
+	call	#USCI_I2C_slave_present	// R12 slave_address => R12 returnValue = !(UCB1STAT & UCNACKIFG)
+	jnz      _end_tmp
+	bis	#st_TMP_B, R13
+_end_tmp
+	mov	#AT24C512, R12
+	call	#USCI_I2C_slave_present	// R12 slave_address => R12 returnValue = !(UCB1STAT & UCNACKIFG)
+	jnz      _end_ee
+	bis	#st_EEPROM_B, R13
+_end_ee
+	mov	#MS5837_30BA, R12
+	call	#USCI_I2C_slave_present	// R12 slave_address => R12 returnValue = !(UCB1STAT & UCNACKIFG)
+	jnz      _end_bar
+	bis	#st_BAROM_B, R13
+_end_bar
+#ifdef	__LCD_PRESENT__
+	mov	#OLED096, R12
+	call	#USCI_I2C_slave_present	// R12 slave_address => R12 returnValue = !(UCB1STAT & UCNACKIFG)
+	jnz      _end_lcd
+	bis	#st_LCD_B, R13
+_end_lcd
+#endif
+/*	call	#TestADC24			// test AD7124
+	jnz	_end_adc24
+	bis	#st_ADC24_B, R13  */
+_end_adc24
+	cmp	#CriticalVIN_LOW ,&D_APOW	// test PS 12v present
+	jlo      _end_PS
+	bis	#st_PS_B, R13
+_end_PS
+	cmp	#CriticalVIN_LOW ,&D_ASENS	// test PS 5v present
+	jlo      _end_PSex
+	bis	#st_PSEX_B, R13
+_end_PSex
+	bis	R13, &st_Periperal		// set periperal presents!
+	ret
+//======================================
+INIT_HW_PRESENT	// init Hard Ware present
+InitDevicePresent	// I2C present Device only -interruptable-
+	bit	#st_TMP_B, &st_Periperal
+	jz      _ini_3
+	call	#Init_TMP75AID
+_ini_3
+	bit	#st_EEPROM_B, &st_Periperal
+	jz      _ini_4
+	call	#Init_AT24C512
+_ini_4
+	bit	#st_BAROM_B, &st_Periperal
+	jz      _ini_5
+	call	#Init_MS5837
+_ini_5
+#ifdef	__LCD_PRESENT__
+	bit	#st_LCD_B, &st_Periperal
+	jz      _ini_ex
+	call	#Init_OLED096
+#endif
+_ini_ex
+    m_Reset_i2c 
+	ret
+//======================================
+TMP75_TEMP_REG 	= 0
+TMP75_CONFIG_REG = 1
+TMP75_Tlow_REG 	= 2	// default 75 gr
+TMP75_Thigh_REG = 3     // default 80 gr
+
+CONFIG_DATA 	= 32	// 10bit 0.25C
+OS		= 128
+SHUTDOWN	= 1
+//===============
+Init_TMP75AID
+	mov	#TMP75AID, &Slave_address 
+	mov	#TMP75_TEMP_REG, &AddrREG
+	call	#USCI_I2C_TxAddr1_RxData2 		// Slave address, AddrREG 
+    m_wait_Rx_i2c	
+	  	mov	 &DataREG, R12		// temperature
+	call	#calc_temerature		// reg / 25.6 = 00.0 gr
+    call    #wait_RDY_I2C	// ... wait I2C Ready
+	
+	mov	#TMP75AID, &Slave_address
+	mov	#(((CONFIG_DATA|OS|SHUTDOWN)<<8)+TMP75_CONFIG_REG), &AddrREG 	// DATA to CONFIG REG
+	call	#USCI_I2C_Tx2				// Slave address, AddrREG
+    call    #wait_RDY_I2C	// ... wait I2C Ready
+    //m_Reset_i2c 
+	ret
+//===============
+Reading_TMP
+	bit	#st_TMP_B, &st_Periperal
+	jz	_ex_12c
+	mov	#TMP75AID, &Slave_address
+	mov	#TMP75_TEMP_REG, &AddrREG
+	br	#USCI_I2C_TxAddr1_RxData2 		// Slave address, AddrREG -> SlotREG
+//---------------	
+Calc_TMP	
+	bit	#st_TMP_B, &st_Periperal
+	jz	_ex_12c
+	  	mov	 &DataREG, R12			// temperature
+stb_next_once
+	mov	#TMP75AID, &Slave_address
+	mov	#(((CONFIG_DATA|OS|SHUTDOWN)<<8)+TMP75_CONFIG_REG), &AddrREG 	// DATA to CONFIG REG
+	call	#USCI_I2C_Tx2				// Slave address, AddrREG
+calc_temerature						// reg / 25.6 = 00.0 gr	
+	push	SR
+	dint					
+	  	swpb	R12
+		mov	R12, &MPYS               	// reg / 25.6 = 00.0 gr
+		mov	#65536*10/256, &OP2          	
+                mov	&RES1, R12             
+	pop	SR
+		mov	R12, &D_TEMP
+_ex_12c		ret
+//======================================
+AT24C512_MyREG =  (0)	// My data 
+//===============
+Init_AT24C512
+	// ...
+	ret
+//======================================
+Init_MS5837
+	call	#RESET_MS5837		// 1380
+	call	#READ_C_CX		// 15460
+	
+	call	#STB_TEMPERATURE	// 1382
+		mov	#10000, R12
+        	call    #halMcuWaitUs   // 140318          	
+	call	#READ_CALC_TMPERATURE	// 2700
+	add	&C_OFFSET_TEMP, R12
+	mov	R12, &D_TEMP
+	call	#STB_PRESSURE		// 1382
+		mov	#10000, R12
+        	call    #halMcuWaitUs 	// 140318           	
+	call	#READ_CALC_PRESSURE  	// 2987	
+	mov	R12, &D_PRESSURE
+	mov	R14, &D_DEPTH
+	ret
+//--------------	
+READ_CALC_TMPERATURE	
+	call	#READ_ADC		// 2595
+	call	#CALC_TEMPERATURE_MS	// 101
+	push	SR
+	dint
+	nop
+		mov	R12, &MPY	
+		mov	#(65535/10), &OP2 // /10
+		mov	&RES1, R12
+	pop	SR		
+	ret 
+	
+READ_CALC_PRESSURE	
+	call	#READ_ADC		// 2595	
+	mov	R12, &M_D1+0
+	mov	R13, &M_D1+2
+	call	#CALC_PRESSURE_MS	// 280
+	call	#CALC_DEPTH		// 45
+	push	SR
+	dint
+	nop
+		mov	R12, &MPY32L	
+		mov	R13, &MPY32H	
+		mov	#(65535/10), &OP2 // /10
+		mov	&RES1, R12
+	pop	SR		
+	
+	ret 
+//--------------	
+Main_STM
+	bit	#st_BAROM_B, &st_Periperal
+	jz      _nxt_stm
+		mov	&STM_Main, R12
+		and	#0x0E, R12
+		add 	R12, PC		
+		jmp	_M_stop   	
+                jmp	_M_1	
+                jmp	_M_2	
+                jmp	_M_3	
+                jmp	_M_4	
+                jmp	_M_5	
+                jmp	_M_6	
+                jmp	_M_7	
+//--------------	
+_M_stop
+_nxt_stm
+	incd	&STM_Main
+        ret
+	
+_M_1
+	call	#STB_TEMPERATURE	// 1382
+	jmp	_nxt_stm	
+_M_2	
+	call	#READ_CALC_TMPERATURE	// 2700
+	add	&C_OFFSET_TEMP, R12
+	mov	R12, &D_TEMP
+	jmp	_nxt_stm	
+_M_3	
+	call	#STB_PRESSURE		// 1382
+	jmp	_nxt_stm	
+_M_4	
+	call	#READ_CALC_PRESSURE  	// 2987	
+	mov	R12, &D_PRESSURE	// /10
+	mov	R14, &D_DEPTH
+	clr	&STM_Main
+	ret
+_M_5	
+_M_6	
+_M_7
+	jmp	_nxt_stm
+//======================================
+#ifdef	__LCD_PRESENT__
+Init_OLED096
+		call	#Init_OLED
+		call    #LogoToLCD	
+		call	#Wait_ToLCD           	// text
+		mov	#4000, R13
+_delay_mS	mov	#1000, R12
+        	call    #halMcuWaitUs           	
+		dec	R13
+		jnz     _delay_mS
+
+		call	#ClrLcd
+    call    #wait_RDY_I2C	// ... wait I2C Ready    
+	ret
+#endif		
+//==============================================================================
+//==============================================================================
+ServicePowerSave
+		bit	#PD_Req_PD_Mode		// Power Save req & mode
+		jz	_ex_serv_com
+		bit	#PD_Req_B		// Power Save request..
+		jz      _to_work
+		bit	#PD_Mode_B		// Power Save mode..
+		jz      _to_save
+		ret
+//==============
+_to_save
+
+		ret
+//==============
+_to_work
+
+		ret
+//==============================================================================
+//==============================================================================
+ServiceBattery		// Service Battery	
+		call	#TEST_STATE_STM         // разрешенные состояния для изменения!
+		jnz	_ex_serv_bat
+		
+		mov	&D_APOW, R12
+_tst_low_batt	
+		cmp	&C_BAT_LOW, R12
+		jhs     _tst_full_batt
+		bis	#BatteryLow_B, &D_STATUS
+//		bic.b	#CHARGE_OFF_B		// charge battery on
+		jmp	_ex_serv_bat
+_tst_full_batt	
+		bic	#BatteryLow_B, &D_STATUS
+		cmp	&C_BAT_FULL, R12
+		jlo     _ex_serv_bat
+//		bis.b	#CHARGE_OFF_B		// charge battery off
+_ex_serv_bat	ret
+//==============================================================================
+//==============================================================================
+Set_FLUXG_MODE	//	app_MODE --> D_STATUS 
+	    
+  		call	#Set_Analog		// Set app_OFFSET_AMP, app_GANE_AMP
+		ret
+		
+//===============================================	
+Init_Analog            // Init power Analog & ADC
+	//	call	#Init_AD7124
+		ret
+Set_Analog
+		ret
+//===============================================	
+Init_DDS		// init DDS
+                bis.b	#SMCLK, &PJDIR_L           // MCLK AD9833 on!
+                bis.b	#SMCLK, &PJSEL0_L           // MCLK AD9833 on!
+		br	#Init_AD9833
+//===============================================
+CopyWord               // src - R12, dst - R13,  length - R14 
+		rra	R14	// to word
+		tst	R14
+		jz	ex_cw
+    loop_cw:	mov   	@R12+, 0(R13)
+              	incd    R13
+		dec	R14
+                jnz	loop_cw
+    ex_cw:	ret
+//==============================================================================
+CALIB_ZERO	// Calibration Zero
+
+		ret
+//==============
+CALIB_POINT	// Calibration Point
+
+		ret
+//==============================================================================
+//==============================================================================
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,297 @@
+//------------------------------------------------------------------------------
+// -----------------   pressure & temperature MS5837-30  -----------------------
+//------------------------------------------------------------------------------
+#define MS5837_30BA 0x76 // 0x76 (1110110 b)
+
+//Bit name PRM COV - Typ Ad2/Os2 Ad1/Os1 Ad0/Os0 Stop Command 
+MS5837_Reset = 0x1E 
+MS5837_D1_OSR256  = 0x40 
+MS5837_D1_OSR512  = 0x42 
+MS5837_D1_OSR1024 = 0x44 
+MS5837_D1_OSR2048 = 0x46 
+MS5837_D1_OSR4096 = 0x48 
+MS5837_D2_OSR256  = 0x50 
+MS5837_D2_OSR512  = 0x52 
+MS5837_D2_OSR1024 = 0x54 
+MS5837_D2_OSR2048 = 0x56 
+MS5837_D2_OSR4096 = 0x58 
+MS5837_ADC_Read = 0x00 
+MS5837_PROM_Read = 0xA0  // to 0xAC 
+
+//M_dT   = BufMEM+0
+//M_OFF  = BufMEM+4
+//M_D1   = BufMEM+8
+
+freshwater = 997	// kg/m^3
+seawater   = 1029 	// kg/m^3
+fluidDensity = seawater
+sea_level = 10130	// mbar*10
+
+K_DEPTH_mm = 6494 //65536/(fluidDensity * 0.980665 / 100)
+
+//MS5837::Pa = 100.0f;
+//MS5837::bar = 0.001f;
+//MS5837::mbar = 1.0f;
+/*
+float MS5837::depth() {
+	return (pressure(MS5837::Pa)-101300)/(fluidDensity*9.80665);
+}
+
+float MS5837::altitude() {
+	return (1-pow((pressure()/1013.25),.190284))*145366.45*.3048;
+}
+*/
+//------------------------------------------------------------------------------
+RESET_MS5837	// 
+	mov	#MS5837_30BA, &Slave_address
+	mov	#MS5837_Reset, &AddrREG 	// DATA to CONFIG REG
+	call	#USCI_I2C_Tx2			// Slave address, AddrREG
+	call    #wait_RDY_I2C			// ... wait I2C Ready
+	ret
+//--------------
+READ_C_CX	//
+		mov	#MS5837_PROM_Read, R12
+		mov	#C_CRC_FD, R13
+		mov	#7, R14
+loop_rd_c_cx	
+		mov	R12, &AddrREG
+		mov	#MS5837_30BA, &Slave_address 
+		call	#USCI_I2C_TxAddr1_RxData2 		// Slave address, AddrREG 
+    m_wait_Rx_i2c	
+		mov	 &DataREG, R15
+		swpb	 R15
+	  	mov	 R15, 0(R13)			// Cx
+		incd	R13
+		incd	R12
+		dec	R14
+		jnz	loop_rd_c_cx
+		
+		mov	#K_DEPTH_mm, 0(R13)
+		incd	R13
+		ret
+//--------------
+READ_ADC
+		mov	#MS5837_ADC_Read, &AddrREG
+		mov	#MS5837_30BA, &Slave_address 
+		mov	#3, &I2C_DataCnt
+		call	#USCI_I2C_TxAddr1_RxDatan 		// Slave address, AddrREG, I2C_DataCnt
+    m_wait_Rx_i2c	
+	  	mov.b	&DataREG+2, R12				// ADC 24bit !!!
+	  	mov.b	&DataREG+1, R13				// ADC 24bit !!!
+		swpb	R13
+		bis	R13, R12
+	  	mov.b	&DataREG+0, R13				// ADC 24bit !!!
+		sxt	R13					// to 32bit
+		ret
+//--------------
+STB_PRESSURE
+		mov	#MS5837_D1_OSR4096, R12
+		jmp	STB_ADC
+
+STB_TEMPERATURE
+		mov	#MS5837_D2_OSR4096, R12
+STB_ADC		
+		mov	#MS5837_30BA, &Slave_address
+		mov	R12, &AddrREG 			// DATA to CONFIG REG
+		call	#USCI_I2C_Tx2			// Slave address, AddrREG
+		call    #wait_RDY_I2C			// ... wait I2C Ready
+		ret	
+//--------------
+CALC_TEMPERATURE_MS
+		call	#CALC_dT	// dT = D2 - TREF = D2 - C5 * 2^8
+		call	#CALC_TEMP	// TEMP = 20°C+dT*TEMPSENS = 2000+dT *C6 /2^23	
+		ret
+		
+CALC_dT		// dT = D2 - TREF = D2 - C5 * 2^8
+		mov.b	&C_C5+0, R14	// C5  unsigned
+		swpb	R14
+		mov.b	&C_C5+1, R15
+		sxt	R15					// to 32bit
+		sub	R14, R12
+		subc	R15, R13
+		
+		mov	R12, &M_dT+0	// dT signed
+		mov	R13, &M_dT+2
+		ret
+		
+CALC_TEMP	// TEMP = 20°C+dT*TEMPSENS = 2000+dT *C6 /2^23
+	push	SR
+	dint
+	nop
+		mov	R12, &MPYS32L	// dT signed
+		mov	R13, &MPYS32H
+		mov	&C_C6, &OP2L	// C6 unsigned
+		mov	#0, &OP2H	// C6
+	//	nop
+		mov	&RES0, R14
+		mov	&RES1, R12
+		mov	&RES2, R13
+	pop	SR		
+		rla	R14
+		rlc	R12
+		rlc	R13
+		and	#0xFF00, R12
+		and	#0x00FF, R13
+		swpb	R12
+		swpb	R13
+		bis	R13, R12
+		add	#2000, R12
+		ret
+//--------------
+CALC_PRESSURE_MS
+		call	#CALC_OFF	// OFF=OFFT1 +TCO*dT =C2 *2^16 +(C4*dT)/2^7
+		call	#CALC_SENS	// SENS=SENS T1+TCS*dT=C1 * 2^15+(C3 *dT)/2^8
+		call	#CALC_P		// P = D1 * SENS - OFF = (D1 * SENS / 2^21 - OFF) / 2^13
+		ret
+CALC_OFF	// OFF=OFFT1 +TCO*dT =C2*2^16 +(C4*dT)/2^7
+	push	SR
+	dint
+	nop
+		mov	&M_dT+0, &MPYS32L	
+		mov	&M_dT+2, &MPYS32H
+		mov	&C_C4, &OP2L	// C4 unsigned
+		mov	#0, &OP2H	// C4
+	//	nop
+		mov	&RES0, R12
+		mov	&RES1, R13
+		mov	&RES2, R14
+	pop	SR		
+		rla	R12
+		rlc	R13
+		rlc	R14
+		
+	m_sh8_48bit	R12, R13, R14		// signed >> 8		
+	/*	swpb	R12
+		mov.b	R12, R12
+		swpb	R13
+		mov	R13, R11
+		and	#0xFF00, R11
+		bis	R11, R12
+		mov.b	R13, R13
+		swpb	R14
+		and	#0xFF00, R14
+		bis	R14, R13
+		
+	*/	
+		add	&C_C2, R13
+		adc	R14
+		mov	R12, &M_OFF+0
+		mov	R13, &M_OFF+2
+		mov	R14, &M_OFF+4
+		ret
+		
+CALC_SENS	// SENS=SENS T1+TCS*dT=C1*2^15 + (C3*dT)/2^8
+	push	SR
+	dint
+	nop
+		mov	&M_dT+0, &MPYS32L	
+		mov	&M_dT+2, &MPYS32H
+		mov	&C_C3, &OP2L		// C3 unsigned
+		mov	#0, &OP2H		// C3 
+	//	nop 
+		mov	&RES0, R12
+		mov	&RES1, R13
+		mov	&RES2, R14
+	pop	SR		
+		
+	m_sh8_48bit	R12, R13, R14		// signed >> 8		
+		
+		mov	&C_C1, R15
+		clr	R11
+		rra	R15
+		rrc	R11
+		add	R11, R12
+		addc	R15, R13
+		adc	R14
+		ret
+		
+CALC_P		// P = D1 * SENS - OFF = (D1 * SENS / 2^21 - OFF) / 2^13
+	push	SR
+	dint
+	nop
+		mov	R12, &MPYS32L	
+		mov	R13, &MPYS32H
+		mov	&M_D1+0, &OP2L
+		mov	&M_D1+2, &OP2H
+	//	nop
+		mov	&RES1, R12
+		mov	&RES2, R13
+		mov	&RES3, R14
+	pop	SR		
+		rla	R12		//  /2^21
+		rlc	R13
+		rlc	R14
+		
+		rla	R12
+		rlc	R13
+		rlc	R14
+
+		rla	R12
+		rlc	R13
+		rlc	R14
+		
+	m_sh8_48bit	R12, R13, R14		// signed >> 8
+	
+		sub	&M_OFF+0, R12	//  -OFF
+		subc	&M_OFF+2, R13
+		subc	&M_OFF+4, R14
+		
+		
+		rla	R12		//  /2^13
+		rlc	R13
+		rlc	R14
+		
+		rla	R12
+		rlc	R13
+		rlc	R14
+		
+		rla	R12
+		rlc	R13
+		rlc	R14
+		
+		mov	R13, R12
+		mov	R14, R13
+		ret
+//--------------
+CALC_DEPTH		// R14 DEPTH = (mbar - 10130)/K_mm
+		mov	R12, R14
+		mov	R13, R15
+		sub	&C_SEA_LEVEL, R14
+		subc	#0, R15
+		
+	push	SR
+	dint
+	nop
+		mov	R14, &MPY32L
+		mov	R15, &MPY32H
+		mov	&C_DEPTH_mm, &OP2	// K_DEPTH_mm
+		nop
+		mov	&RES1, R14
+	pop	SR		
+		
+		
+		ret
+//------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

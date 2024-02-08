@@ -1,0 +1,916 @@
+################################################################################
+#                                                                              #
+#      IAR Universal Linker V6.5.1.95                                          #
+#                                                                              #
+#           Link time     =  08/Feb/2024  11:07:44                             #
+#           Target CPU    =  MSP430                                            #
+#           List file     =  D:\USER\430\U_FLUXG\Debug\List\FLUXG.map          #
+#           Output file 1 =  D:\USER\430\U_FLUXG\Debug\Exe\FLUXG.d43           #
+#                            Format: ubrof10                                   #
+#                            UBROF version 10.0.6                              #
+#                            Using library modules for C-SPY (-rt)             #
+#           Command line  =  -f C:\Users\isc_l\AppData\Local\Temp\EWAE64.tmp   #
+#                            (D:\USER\430\U_FLUXG\Debug\Obj\FLUXG_01.r43 -o    #
+#                            D:\USER\430\U_FLUXG\Debug\Exe\FLUXG.d43 -l        #
+#                            D:\USER\430\U_FLUXG\Debug\List\FLUXG.map -xms     #
+#                            "-ID:\Program Files (x86)\IAR Systems\Embedded Wo #
+#                            rkbench 8.0\430\LIB\"                             #
+#                            -f                                                #
+#                            "D:\Program Files (x86)\IAR Systems\Embedded Work #
+#                            bench 8.0\430\config\linker\lnk430fr6972.xcl"     #
+#                            (-cmsp430 -QCODE_I=CODE_ID -QTLS16_I=TLS16_ID     #
+#                            -D__iar_HWMUL=4C0 -Z(CONST)INFO=1800-19FF         #
+#                            -Z(CONST)INFOA=1980-19FF                          #
+#                            -Z(CONST)INFOB=1900-197F                          #
+#                            -Z(CONST)INFOC=1880-18FF                          #
+#                            -Z(CONST)INFOD=1800-187F                          #
+#                            -Z(DATA)TINYRAM=0006-001F                         #
+#                            -Z(DATA)DATA16_I,DATA16_Z,DATA16_N,TLS16_I=1C00-2 #
+#                            3FF                                               #
+#                            -Z(DATA)CODE_I                                    #
+#                            -Z(DATA)DATA20_I,DATA20_Z,DATA20_N                #
+#                            -Z(DATA)CSTACK+_STACK_SIZE#                       #
+#                            -Z(CONST)DATA16_P,DATA20_P=4400-FF7F              #
+#                            -Z(DATA)DATA16_HEAP+_DATA16_HEAP_SIZE             #
+#                            -Z(DATA)DATA20_HEAP+_DATA20_HEAP_SIZE             #
+#                            -Z(CONST)MPU_B1 -Z(CONST)IPE_B1=4400-FF7F         #
+#                            -Z(DATA)IPEDATA16_N -Z(CODE)IPECODE16             #
+#                            -Z(CONST)IPEDATA16_C,IPE_B2 -Z(CONST)MPU_B2       #
+#                            -Z(CONST)DATA16_C,DATA16_ID,TLS16_ID,DIFUNCT,CHEC #
+#                            KSUM=4400-FF7F                                    #
+#                            -Z(CODE)CSTART,ISR_CODE,CODE16=4400-FF7F          #
+#                            -P(CODE)CODE=4400-FF7F,10000-13FFF                #
+#                            -Z(CODE)CODE_PAD                                  #
+#                            -Z(CONST)DATA20_C,DATA20_ID,CODE_ID=4400-FF7F,100 #
+#                            40-13FFF                                          #
+#                            -Z(CONST)SIGNATURE=FF80-FF8F                      #
+#                            -Z(CONST)JTAGSIGNATURE=FF80-FF83                  #
+#                            -Z(CONST)BSLSIGNATURE=FF84-FF87                   #
+#                            -Z(CONST)IPESIGNATURE=FF88-FF8F                   #
+#                            -Z(CODE)INTVEC=FF90-FFFF                          #
+#                            -Z(CODE)RESET=FFFE-FFFF) -f                       #
+#                            "D:\Program Files (x86)\IAR Systems\Embedded Work #
+#                            bench 8.0\430\config\linker\multiplier32.xcl"     #
+#                            (-e?Mul8Hw=?Mul8 -e?Mul16Hw=?Mul16                #
+#                            -e?Mul16to32uHw=?Mul16to32u                       #
+#                            -e?Mul16to32sHw=?Mul16to32s -e?Mul32Hw32=?Mul32   #
+#                            -e?Mul64Hw32=_Mul64i                              #
+#                            -e?Mul32u32uto64iHw32=_Mul32u32uto64i             #
+#                            -e?Mul32fHw32=_Mul32f                             #
+#                            -e_Mul64fHw32Ptr=_Mul64fPtr) -D_STACK_SIZE=A0     #
+#                            -rt -D_DATA16_HEAP_SIZE=A0                        #
+#                            -D_DATA20_HEAP_SIZE=50)                           #
+#                                                                              #
+#                           Copyright (C) 1987-2016 IAR Systems AB.            #
+################################################################################
+
+
+
+
+
+                ****************************************
+                *                                      *
+                *           CROSS REFERENCE            *
+                *                                      *
+                ****************************************
+
+                  There are no program entries.
+
+
+                ****************************************
+                *                                      *
+                *    AUTOMATIC SYMBOL REDIRECTIONS     *
+                *                                      *
+                ****************************************
+
+                  There are no automatic symbol redirections.
+
+
+
+                ****************************************
+                *                                      *
+                *              MODULE MAP              *
+                *                                      *
+                ****************************************
+
+
+  DEFINED ABSOLUTE ENTRIES
+    *************************************************************************
+
+  DEFINED ABSOLUTE ENTRIES
+  PROGRAM MODULE, NAME : ?ABS_ENTRY_MOD
+
+Absolute parts
+           ENTRY                   ADDRESS         REF BY
+           =====                   =======         ======
+           _DATA20_HEAP_SIZE       0050 
+           _DATA16_HEAP_SIZE       00A0 
+           _STACK_SIZE             00A0 
+           __iar_HWMUL             04C0 
+    *************************************************************************
+
+  FILE NAME : D:\USER\430\U_FLUXG\Debug\Obj\FLUXG_01.r43
+  PROGRAM MODULE, NAME : FLUXG_01
+
+Absolute parts
+     1800 - 1835
+     1880 - 188F
+     4400 - 7698
+     7800 - 7AC8
+           LOCAL                   ADDRESS         
+           =====                   =======         
+           st_StatusAPP            1CEC 
+           VariableRAM             1C00 
+           RxBuffer0               1C00 
+           TxBuffer0               1C40 
+           RxPtr0                  1C80 
+           TxPtr0                  1C82 
+           CRC16Rx0                1C84 
+           CRC16Tx0                1C86 
+           StatusMB0               1C88 
+           CounterTx0              1C8A 
+           VAL0_3_5ch              1C8C 
+           SN__                    1C8E 
+           Status01                1C90 
+           StatusI2C               1C92 
+           TimerUSER_mS            1C94 
+           TimerLED1               1C96 
+           TimerLED2               1C98 
+           TimerBUZ                1C9A 
+           TimerPowOFF             1C9C 
+           I2C_TxCnt               1C9E 
+           I2C_DataCnt             1CA0 
+           I2C_TxPtr               1CA2 
+           I2C_DataPtr             1CA4 
+           I2C_cntNAC              1CA6 
+           DataREG                 1CA8 
+           AddrREG                 1CA8 
+           AddrREG1                1CAA 
+           BufMEM                  1CAC 
+           TemporaryDWord          1CB8 
+           TemporaryWord           1CBA 
+           STM_Main                1CBC 
+           STM_DSP                 1CBE 
+           FlagsDSP                1CC0 
+           DATA_MES                1CC2 
+           N_DATA_MES              1CC4 
+           TA1R_EXT                1CC6 
+           TA1CCR1_EXT             1CC8 
+           M_dT                    1CCA 
+           M_D1                    1CCE 
+           M_OFF                   1CD2 
+           RndNum                  1CD8 
+           cur_Freq                1CDA 
+           KeyBuf                  1CDE 
+           StatusLCD               1CDE 
+           ColumnAddress           1CE0 
+           PageAddress             1CE2 
+           ptr_ServScript          1CE4 
+           IF_STACK                1CE6 
+           SlaveAddressMB0         1CE7 
+           LRCa                    1CE8 
+           LRCb                    1CE9 
+           AES256_VEC              48AC 
+           RTC_VEC                 478C 
+           LCD_VEC                 48AC 
+           PORT4_VEC               48AC 
+           PORT3_VEC               48AC 
+           TIMER3_A1_VEC           48AC 
+           TIMER3_A0_VEC           48AC 
+           PORT2_VEC               48D2 
+           TIMER2_A1_VEC           48AC 
+           TIMER2_A0_VEC           48AC 
+           PORT1_VEC               48AE 
+           TIMER1_A1_VEC           5520 
+           TIMER1_A0_VEC           551E 
+           DMA_VEC                 5500 
+           USCI_B1_VEC             48AC 
+           USCI_A1_VEC             48AC 
+           TIMER0_A1_VEC           4892 
+           TIMER0_A0_VEC           4890 
+           ADC12_VEC               5612 
+           USCI_B0_VEC             540C 
+           USCI_A0_VEC             4B74 
+           WDT_VEC                 48AC 
+           TIMER0_B1_VEC           554E 
+           TIMER0_B0_VEC           554C 
+           COMP_E_VEC              48AC 
+           UNMI_VEC                56F0 
+           SYSNMI_VEC              48AC 
+           RESET_VEC               4400 
+           Init                    4400 
+           RESET_TST               44CE 
+           InitPort                45B4 
+           delay_200mS             441A 
+           McuWait_mS              4928 
+           InitMemory              46A8 
+           WS                      4426 
+           InitOscilator           464C 
+           InitRTC                 472C 
+           InitTimerA0             46A0 
+           InitSerial              4B3E 
+           InitSPI                 45A4 
+           Init_Analog             59F2 
+           Init_DDS                59F6 
+           Init_USCI_I2C_B0        5262 
+           TEST_HW_PRESENT         5790 
+           INIT_HW_PRESENT         57E8 
+           Reset_ptr_script        6074 
+           InitDMA                 54EA 
+           InitTimerB0             554A 
+           InitTimerA1             550C 
+           INP_AMP_ON              464A 
+           InitADC12               556E 
+           main_loop               4494 
+           ServiceFLUXG            56CA 
+           ServiceUart             4CF8 
+           ServiceCommand          5700 
+           Update1sec              4508 
+           ServiceSCRIPT           6038 
+           Update1min              452A 
+           Update025sec            44F2 
+           _RST_All                44C2 
+           _RST_Master             44C2 
+           _RES_ok                 44EC 
+           _POR_ok                 44EC 
+           Ex_1xxx                 4534 
+           Main_STM                592C 
+           ServiceSW               4536 
+           ServiceBattery          59C6 
+           ServicePowerSave        59A8 
+           _ex_mdp                 4528 
+           Set_FLUXG_MODE          59EC 
+           _ex_1s                  4528 
+           Pause_SLOT_I2C          4538 
+           wait_RDY_I2C            53F6 
+           Protect_I2C_call        453C 
+           Proceed_SLOT_I2C        4542 
+           _tab_n_line             4548 
+           TEST_PAGE               454C 
+           app_Menu_Page           1D13 
+           _np_min                 4560 
+           _ex_np                  456C 
+           TEST_LINE               456E 
+           app_Menu_Line           1D12 
+           _nl_min                 4582 
+           _ex_nl                  458E 
+           TEST_b_Min_Max          4590 
+           _tl_min                 459A 
+           halMcuWaitUs            4936 
+           do_while3               468A 
+           ClrBlock_Settings       46A8 
+           Block_Settings          1D0E 
+           LoopClrData             471E 
+           ClrBlock_Data           46B4 
+           Block_Data              1D18 
+           PresetTime              46C0 
+           D_DATE                  1D1C 
+           D_MONTH                 1D1D 
+           D_YEAR                  1D1E 
+           D_DAY                   1D1F 
+           ClrBlock_Status         46D8 
+           Block_Status            1CEA 
+           ClrDataMemory           46E4 
+           InitAppXX               46F0 
+           init_FunctionRAM        56FE 
+           InitParams              46F8 
+           st_EvtReset             1D04 
+           st_CntReset             1D02 
+           C_FLAGS_APP             180A 
+           app_MODE                1D10 
+           D_STATUS                1D20 
+           Clr_Ph_min_max          4710 
+           st_Phase_min            1CF8 
+           st_Phase_max            1CFA 
+           LoopClr                 4720 
+           C_PPM                   180C 
+           RTCOFIFG_HND            47A0 
+           RTCRDYIFG_HND           47A2 
+           RTCEVIFG_HND            4850 
+           RTCAIFG_HND             4852 
+           RT0PSIFG_HND            4854 
+           RT1PSIFG_HND            4878 
+           clock_                  47A2 
+           _1_sec_                 47B0 
+           D_SEC                   1D19 
+           ClockEnd                4842 
+           D_MIN                   1D1A 
+           D_HR                    1D1B 
+           dayOk                   480A 
+           noLeap                  4822 
+           ClockEnd_ret            4840 
+           Tab_daysInMonth         4844 
+           date_1                  482A 
+           Cl_End                  483C 
+           TstTMR_X1               485E 
+           TstTMR_X3               485E 
+           TstTMR_X4               4876 
+           D_SEC_256               1D18 
+           _ex_025                 488C 
+           TMR0A_1_HND             48A6 
+           TMR0A_2_HND             48A8 
+           T0AIFG_HND              48A4 
+           _Ex_INT                 48A4 
+           TMRA_UART               4B9C 
+           P1_0_HND                48D0 
+           P1_1_HND                48CE 
+           P1_2_HND                48CC 
+           P1_3_HND                48CA 
+           P1_4_HND                48C8 
+           P1_5_HND                48C6 
+           P1_6_HND                48C4 
+           P1_7_HND                48C2 
+           P2_0_HND                48F4 
+           P2_1_HND                48F2 
+           P2_2_HND                48F0 
+           P2_3_HND                48EE 
+           P2_4_HND                48EC 
+           P2_5_HND                48EA 
+           P2_6_HND                48E8 
+           P2_7_HND                48E6 
+           ServiceAPP              48F6 
+           Hex2Bit                 48F8 
+           CopyData                4918 
+           ex_cd                   4926 
+           loop_cd                 491C 
+           ExWait                  494E 
+           SetChangeMEMORY         4950 
+           REPAIR_TMR_AFTER_ERASE_FLASH
+                                   4950 
+           FR_ERASE                4952 
+           FR_FILL                 4954 
+           _l_fr_er                4954 
+           _ex_fr_wr               497A 
+           FR_WRITE                4960 
+           _ex_fr                  497A 
+           _l_fr_b                 497C 
+           _l_fr_w                 4970 
+           Write_Seg               4988 
+           loopWr_SegB             49A4 
+           loopWr_SegW             4998 
+           Erase_Seg               49B0 
+           loopEr_SegW             49BA 
+           TabX                    49C8 
+           Tab2X                   49CA 
+           Tab2BIT                 49EA 
+           MUL16S_                 4A0A 
+           MPY10                   4A22 
+           DIV32                   4A32 
+           DIVIDE                  4A32 
+           DIV1                    4A38 
+           DIV2                    4A3E 
+           DIV4                    4A54 
+           DIV3                    4A52 
+           DIVS32                  4A58 
+           _DIVS                   4A5A 
+           _DIVS1                  4A6A 
+           _DIVSERR                4A86 
+           _DIVS2                  4A76 
+           _DIVS3                  4A84 
+           BCDBIN                  4A8A 
+           SHFT4                   4A90 
+           _END                    4AB4 
+           MPYx10                  4AA8 
+           HEXBIN                  4AB6 
+           _eend                   4AC0 
+           SQRT                    4AC6 
+           _l_sqr                  4ACC 
+           _lo_sqr                 4AE8 
+           _hi_sqr                 4AEA 
+           VECTOR_MAGNITUDE_APPROXIMATION
+                                   4AF6 
+           __ba                    4B24 
+           __ex_ab                 4B38 
+           InitUartA0_RS485        4B4C 
+           EUSCI_A0_VEC            4B74 
+           RX0IFG_HND              4B80 
+           TX0IFG_HND              4B7C 
+           ModBusTX_VEC0           4C4E 
+           ModBusRX_VEC0           4BE0 
+           CalcNetworkID_M0        4B8A 
+           _sl                     4B96 
+           _ms0                    4B90 
+           C_DEVICE_ADDR           1806 
+           RxCrcOk                 4BC8 
+           C_FLAGS                 1808 
+           RxEnd                   4BCE 
+           ExVecRX                 4C48 
+           TstBufEnd               4C14 
+           ID_Ok                   4BFC 
+           DataToBuf               4C2C 
+           RxCRC16_ADD0            4F74 
+           TstEndTx                4C7A 
+           EndTx                   4C62 
+           ToTxByte                4CAE 
+           TxCrcLow                4CA0 
+           TxCRC16_ADD0            4F8C 
+           CalcNetworkID           4CC8 
+           InitTx0                 4CCE 
+           InitTxErr0              4CD0 
+           InitTxUART0             4CD0 
+           ExServUart              4CF6 
+           Serv_Uart0              4CF8 
+           Serv_Uart1              4D38 
+           To_Serv_Uart            4D3A 
+           FromRFxx                4D46 
+           NWK_ReadMemory_41       4DD4 
+           NWK_WriteMemory_42      4E48 
+           NWK_Message_40          4DD2 
+           FromBT_LE               4D6C 
+           ExtReadMemory_43        4DE0 
+           ExtWriteMemory_44       4E54 
+           FunNotSupport_01        4D7C 
+           ExceptionCode_XX        4D7E 
+           _new_exeption           4DB8 
+           TxErr                   4D90 
+           AddressError_02         4D92 
+           NbyteError_03           4D96 
+           RdWrError_04            4D9C 
+           DeviceBusy_06           4DA0 
+           RouteError_0A           4DA6 
+           NotRespond_0B           4DAC 
+           SecureError_07          4DB2 
+           _expt                   4DC8 
+           cpy_nwk                 4EE0 
+           RD_MEM                  4DEE 
+           BlockToRealAddr         4F40 
+           TstAddrBlock            4F56 
+           TestAccessRdAddr        4F32 
+           RdData_43               4E26 
+           VirtualRd_43            4E36 
+           LoopRdData_             4E28 
+           InitTx                  4E34 
+           VirtualRd_              4E38 
+           WR_MEM                  4E74 
+           TestAccessWrAddr        4F26 
+           FlashWr_44              4EC8 
+           RamWr_44                4EB6 
+           RamWr_                  4EBA 
+           _to_cpy                 4F0C 
+           TstAA                   4F3C 
+           ReturnError             4F52 
+           ReturnOk                4F6E 
+           Block_Header            75F4 
+           NextBlock               4F44 
+           EndBlock_Header         7664 
+           WaitRxDataUART          4F72 
+           TabCRC_Hi               4FA4 
+           TabCRC_Lo               50A4 
+           ServiceMessage          51A4 
+           _Ex_serv_mesage         51C4 
+           ServiceMes              51AC 
+           _Ex_serv_m              51BE 
+           MakeMessage             51C6 
+           _inc_sn                 51EE 
+           _end_cpy_data           524A 
+           CopyWord                5A02 
+           SendLongMessage         5256 
+           BusClearI2C             527E 
+           _l_10_clk               52AA 
+           USCI_I2C_Tx2            52EA 
+           USCI_I2C_TxnPtr         52F8 
+           USCI_I2C_TxAddr1_RxData2
+                                   5320 
+           USCI_I2C_TxAddr1_RxDatan
+                                   5324 
+           _tnrn                   5328 
+           USCI_I2C_TxAddrn_RxDatan
+                                   5334 
+           _set_stop_gen           5352 
+           _go_xx_gen              5356 
+           USCI_I2C_slave_present
+                                   537C 
+           _w_stp                  53B2 
+           _w_ret                  53C4 
+           WaitN_initIIC           53D8 
+           _err_dev                53BE 
+           _w_ret_e                53C8 
+           USCI_I2C_notready       53DE 
+           USCI_I2C_ACK_POLLING    53E6 
+           wait_rdiic              53FC 
+           _ex_poll                5408 
+           I2C_UCNACKIFG           5458 
+           I2C_UCSTPIFG            54DC 
+           I2C_UCRXIFG0            5430 
+           I2C_UCTXIFG0            546A 
+           I2C_UCBCNTIFG           544E 
+           _STP_ex                 5452 
+           _ex_i2c_int             5456 
+           _end_tx_i2c             54B2 
+           _fill_i2c               549E 
+           _tx_l                   5476 
+           _Tx_data                548C 
+           _ReadStartMode          54CC 
+           InitDMA0                54FC 
+           DMA0_HND                54FE 
+           CCIFG_1_HND             5538 
+           CCIFG_2_HND             5548 
+           TA1IFG_HND              5532 
+           _nxt_st_TR              5546 
+           TB0IFG_1_HND            556C 
+           TB0IFG_2_HND            556A 
+           TB0IFG_3_HND            5568 
+           TB0IFG_4_HND            5566 
+           TB0IFG_5_HND            5564 
+           TB0IFG_6_HND            5562 
+           TB0IFG_HND              5560 
+           StopADC12               55C8 
+           _ref_buzy               5572 
+           StartADC12_All          559C 
+           _stopADC                55CC 
+           InitADC12_Sample        55F0 
+           ADOV                    5666 
+           ADTOV                   5668 
+           ADHI                    566E 
+           ADLO                    566E 
+           ADIN                    566E 
+           ADC12M3                 5672 
+           ADC12M15                5664 
+           st_CntAdcOvfl           1D06 
+           C_OFFSET_APOW           1810 
+           D_APOW                  1D24 
+           C_OFFSET_ASENS          1812 
+           D_ASENS                 1D26 
+           C_OFFSET_AN1            1814 
+           D_AN1                   1D2C 
+           C_OFFSET_AN2            1816 
+           D_AN2                   1D2E 
+           _ex_ADC_all             56C0 
+           Process_STM             56CA 
+           _MAIN_stop              56E2 
+           _MAIN_start             56DE 
+           _MAIN_set_AB_mn         56E0 
+           _MAIN_on_AB             56E2 
+           _MAIN_measure           56E2 
+           _MAIN_off_AB_mn         56E2 
+           _MAIN_calc              56E2 
+           _MAIN_next              56E4 
+           _M_exit                 56E8 
+           TEST_STATE_STM          56EA 
+           POW_AMP_ON              56FA 
+           POW_AMP_OFF             56FC 
+           app_CtrlFlags           1D0E 
+           _ex_serv_com            578E 
+           _TST_002                570E 
+           _TST_003                571A 
+           CALIB_ZERO              5A14 
+           _ex_clr_com             578A 
+           _TST_004                5726 
+           CALIB_POINT             5A16 
+           _TST_005                5726 
+           _TST_006                5744 
+           __pd                    573C 
+           _TST_007                5750 
+           _TST_008                5750 
+           _TST_009                5770 
+           st_CntErrPack           1CFC 
+           st_CntResivPac          1CFE 
+           st_CntTrxPac            1D00 
+           _TST_010                5770 
+           _TST_011                5770 
+           _TST_012                578A 
+           __scr                   5782 
+           PollDevicePresent       5790 
+           st_Periperal            1CEA 
+           _end_tmp                57A6 
+           _end_ee                 57B4 
+           _end_bar                57C2 
+           _end_lcd                57CE 
+           _end_adc24              57CE 
+           _end_PS                 57D8 
+           _end_PSex               57E2 
+           InitDevicePresent       57E8 
+           _ini_3                  57F4 
+           Init_TMP75AID           581C 
+           _ini_4                  5800 
+           Init_AT24C512           58A0 
+           _ini_5                  580C 
+           Init_MS5837             58A2 
+           _ini_ex                 5816 
+           Init_OLED096            5982 
+           calc_temerature         5884 
+           Reading_TMP             5852 
+           _ex_12c                 589E 
+           Calc_TMP                5868 
+           stb_next_once           5874 
+           D_TEMP                  1D22 
+           RESET_MS5837            5CE8 
+           READ_C_CX               5CFE 
+           STB_TEMPERATURE         5D6E 
+           READ_CALC_TMPERATURE    58DC 
+           C_OFFSET_TEMP           180E 
+           STB_PRESSURE            5D68 
+           READ_CALC_PRESSURE      58FC 
+           D_PRESSURE              1D28 
+           D_DEPTH                 1D2A 
+           READ_ADC                5D3A 
+           CALC_TEMPERATURE_MS     5D86 
+           CALC_PRESSURE_MS        5DEA 
+           CALC_DEPTH              5F30 
+           _nxt_stm                594E 
+           _M_stop                 594E 
+           _M_1                    5954 
+           _M_2                    595A 
+           _M_3                    5968 
+           _M_4                    596E 
+           _M_5                    5980 
+           _M_6                    5980 
+           _M_7                    5980 
+           Init_OLED               5A94 
+           LogoToLCD               5C26 
+           Wait_ToLCD              5CBC 
+           _delay_mS               5992 
+           ClrLcd                  5C70 
+           _to_work                59C4 
+           _to_save                59C2 
+           _ex_serv_bat            59EA 
+           _tst_low_batt           59D0 
+           C_BAT_LOW               182E 
+           _tst_full_batt          59DE 
+           C_BAT_FULL              1830 
+           Set_Analog              59F4 
+           Init_AD9833             5F58 
+           ex_cw                   5A12 
+           loop_cw                 5A08 
+           DisplayColumnSet        5A18 
+           DisplayCommand2         5A2E 
+           OLED_I2C_TxnCOM         5A4E 
+           DisplayCommand          5A42 
+           OLED_I2C_Txn            5A52 
+           MEM_I2C_RD8             5A6A 
+           MEM_I2C_Rxn             5A78 
+           Init_LCDx               5A9C 
+           Display_OFF             5B38 
+           C_LCD_FLAGS             1832 
+           e_norm                  5ABA 
+           SegmentDriverDirectionReverse
+                                   5AEA 
+           CommonOutputModeReverse
+                                   5AF0 
+           e_rote                  5AC2 
+           SegmentDriverDirectionNormal
+                                   5AF6 
+           CommonOutputModeNormal
+                                   5AE4 
+           On_Lcd                  5ACC 
+           DisplayReverse          5B02 
+           ChargePump_ON           5B4A 
+           Display_ON              5B28 
+           DisplayStartLineSet     5B08 
+           C_LCD_BRIGHT            1833 
+           DisplayVolume           5B44 
+           DisplayNormal           5AFC 
+           DisplayNextPageSet      5B12 
+           PageSet                 5B1E 
+           DisplayPageSet          5B1A 
+           SymbolToLcd             5B54 
+           Lcd8x16                 5B6E 
+           Lcd8x8                  5B64 
+           AdrTab8x8               65F4 
+           WrLc8B                  5B8C 
+           AdrTab8x16              69F4 
+           Write8ByteDPTR          5B96 
+           LoopWr8                 5B9C 
+           _end_symbol             5BEA 
+           _end_screen             5BE4 
+           WrLcdByte               5BAC 
+           _norm                   5BBE 
+           ExL8                    5BCC 
+           Ex001                   5BE2 
+           StringToLCD             5BF0 
+           StrToLCD                5C02 
+           Ex_STL                  5C1C 
+           ex_lcd                  5C24 
+           Block_Logo              71F4 
+           LoopRomLcd              5C2E 
+           loopWrxLcd              5C40 
+           _nxt_l_bb               5C60 
+           ClrLcdScript            5C70 
+           LoopClrLcd              5C78 
+           web_                    5CA8 
+           Ex_upd_lcd              5CD2 
+           SUMB_TO_LCD             5CD4 
+           C_CRC_FD                1880 
+           loop_rd_c_cx            5D0A 
+           STB_ADC                 5D72 
+           CALC_dT                 5D90 
+           CALC_TEMP               5DAA 
+           C_C5                    188A 
+           C_C6                    188C 
+           CALC_OFF                5DF8 
+           CALC_SENS               5E5A 
+           CALC_P                  5EB4 
+           C_C4                    1888 
+           C_C2                    1884 
+           C_C3                    1886 
+           C_C1                    1882 
+           C_SEA_LEVEL             181A 
+           C_DEPTH_mm              188E 
+           InitDDS                 5F58 
+           Set_CTRL                6016 
+           Set_FREQ_DDS            5F7A 
+           Set_PHASE               600E 
+           Freq2reg                5F82 
+           Set_FREQ0               5FB2 
+           _ex_scrpt               6072 
+           TEST_EMERGENCY_STATE    6088 
+           _decode_next            604E 
+           Block_TextTask          7800 
+           _decode_                605E 
+           DECODE_COM              6092 
+           FndNextCOMMAND          6470 
+           End_script              6074 
+           ex_e                    6090 
+           IF_MODE                 60E8 
+           ELSE_MODE               6104 
+           _false__                60E6 
+           _end_lcd_com_           60DE 
+           MENU_MODE               612A 
+           DECODE_MENU             60BE 
+           TEXT_MODE               620A 
+           PRINT_REG               6260 
+           COMMAND_MODE            61D6 
+           GRAPHICS_MODE           61F6 
+           MEMORY_WR_              63BE 
+           END_MODE                6118 
+           _inc_TRUE               6124 
+           _exept_TRUE             6126 
+           ConvDEC_BIN             64B6 
+           Tag_no_eqval            6160 
+           _decode_menu_           615E 
+           Action_Menu             6144 
+           Action_key              6172 
+           Action_pb_short         61BA 
+           Action_pb_long          61C8 
+           _tst_dn                 6184 
+           _tst_right              6192 
+           _tst_left               61A6 
+           nxt_COM                 61E8 
+           _Ex___                  625E 
+           _BMP_Mode               6200 
+           TMX                     6228 
+           NEXT_                   624C 
+           STRING_LCD              6256 
+           Ld_MB_com               6490 
+           _nxt_prn                626A 
+           scr_DEC                 62E4 
+           scr_HEX                 6342 
+           scr_DIV                 6282 
+           _tst100                 6294 
+           DEC_DIV                 62A2 
+           _ex_scr_div             62E2 
+           _div_10_                62CA 
+           _div_100_               62B2 
+           Reg_To_LCD_DEC          62FA 
+           TstAddrAccess           6454 
+           L_xx                    6300 
+           L_1b                    6328 
+           L_2b                    631A 
+           L_4b                    630C 
+           Hex2bcd32               65C2 
+           L_4c                    6314 
+           ConvHEXtoLCD10          6522 
+           L_ex                    6334 
+           Hex2bcd16               65B0 
+           L_2c                    6322 
+           Hex2bcd8                659C 
+           L_1c                    6330 
+           NEXT_2                  6336 
+           Reg_To_LCD_HEX          6344 
+           L_xxh                   6360 
+           L_1bh                   637C 
+           L_2bh                   6374 
+           L_4bh                   636A 
+           _TEST_IF                6384 
+           _and                    6384 
+           _eq                     6390 
+           _false_if               63B2 
+           _true_if                63B8 
+           _lo                     639C 
+           _hi                     63A8 
+           ex_k                    6438 
+           _value                  63D2 
+           _reg                    63CC 
+           app_RegOperand          1D16 
+           _end_operand            63D6 
+           _no_sram                63DE 
+           _word                   63E8 
+           _byte                   63E2 
+           _bic                    63EC 
+           _bis                    63F6 
+           _ok_xx                  6424 
+           _xor                    6400 
+           _wr                     640A 
+           _add                    6414 
+           _addw                   6422 
+           _fl_w                   643E 
+           _ram_w                  6444 
+           _ex_TRUE                643A 
+           _w_w                    644E 
+           FndNextCOM              647C 
+           __end__                 648C 
+           ConvDecBin16            64B8 
+           _tst_n_ch               64BE 
+           _tst_n_                 64D4 
+           _er_no_ch               650C 
+           cnv_tetr                6510 
+           _end_cnv                650A 
+           x10tet_conv             6534 
+           x_conv                  6538 
+           xtet_conv               655A 
+           loop_x_c                6550 
+           npnp                    6566 
+           loopRla                 656A 
+           convChar                657E 
+           nxtSmb                  6594 
+           wrSmb                   6590 
+           ToBcd                   65DE 
+           ToBcdSign               65D8 
+           L$1                     65E4 
+           end_Tab8x8              69F4 
+           end_Tab8x16             71F4 
+           end_Logo                75F4 
+           Block_HeaderX           7604 
+           Block_Info              7664 
+           Block_Constant          1800 
+           F_END_ALL_SEGMENT       7C00 
+           C_DEVICE_NUMBER         1800 
+           C_DEVICE_CHANNEL        1804 
+           C_PARAMS                1818 
+           C_TRASHOLD_CD__         181C 
+           C_RESPONCE_DELAY_       181E 
+           C_SHIFT_ANGLE__         1820 
+           C_GANE_AMP              1822 
+           C_A_R_AMP___            1824 
+           C_TIME_NAV_POLLING__    1826 
+           C_INTERVAL_BEACON__     1828 
+           C_DELAY_SINC            182A 
+           C_TIME_POWER_OFF        182C 
+           C_PHASE_ERR_CD__        1834 
+           C_FLT1_SET              1890 
+           st_ch_ABCDEF            1CEE 
+           st_ch_AN1AN2            1CF0 
+           st_Val_AB               1CF2 
+           st_Val_mn               1CF4 
+           st_Phase                1CF6 
+           st_Level_max            1D08 
+           st_BIAS                 1D0A 
+           st_SN                   1D0C 
+           st_ADC_ID               1D0D 
+           app_ScriptFlags         1D14 
+           app_ScriptStatus        1D15 
+           D_PRS_DP                1D30 
+           D_ch_1                  1D32 
+           D_ch_2                  1D34 
+           D_ch_3                  1D36 
+           D_ch_4                  1D38 
+           D_ch_5                  1D3A 
+           D_ch_6                  1D3C 
+           D_ch_7                  1D3E 
+           D_ch_AB__               1D40 
+           D_ch_nm__               1D42 
+           D_amp_AB__              1D44 
+           D_val_mn__              1D46 
+           tstSize                 1D48 
+           END_USED_RAM            1D4A 
+  SEGMENTS IN THE MODULE
+  ======================
+INTVEC
+  Common segment, address: FF90 - FFFF (0x70 bytes), align: 1
+  Segment part 0. ROOT 
+    -------------------------------------------------------------------------
+CSTACK
+  Relative segment, address: 2360, align: 1
+  Segment part 1. ROOT 
+
+
+
+
+                ****************************************
+                *                                      *
+                *      SEGMENTS IN ADDRESS ORDER       *
+                *                                      *
+                ****************************************
+
+
+SEGMENT              SPACE    START ADDRESS   END ADDRESS     SIZE  TYPE  ALIGN
+=======              =====    =============   ===========     ====  ====  =====
+CSTACK                                 2360 - 23FF              A0   rel    1
+INTVEC                                 FF90 - FFFF              70   com    1
+                                       1800 - 1835              36  aseg  
+                                       1880 - 188F              10  aseg  
+                                       4400 - 7698            3299  aseg  
+                                       7800 - 7AC8             2C9  aseg  
+
+                ****************************************
+                *                                      *
+                *        END OF CROSS REFERENCE        *
+                *                                      *
+                ****************************************
+
+ 112 bytes of CODE memory (+ 13 736 absolute )
+ 160 bytes of DATA memory
+
+Errors: none
+Warnings: none
+

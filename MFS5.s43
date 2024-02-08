@@ -1,0 +1,254 @@
+// #define	__COM_PORT_A1__
+;---------------------------------------
+;-------- *** StatusMB bits *** --------
+#define New_Format_B	(0x0001)
+#define Route_Field_B	(0x0002)
+// App specific		(0x0004)			
+#define Wait_Respond_B	(0x0008)	// ModBus Master mode
+
+#define RxOk_B		(0x0010)
+#define RxData_B	(0x0020)
+#define OkCRC_B		(0x0040)
+#define HostConnect_B	(0x0080)
+
+#define TxOk_B		(0x0100)   
+#define TxData_B	(0x0200)
+#define TxCRC_B		(0x0400)
+#define TxErr_B		(0x0800)
+
+// App specific		(0x1000)
+#define Uart1_B		(0x2000)
+#define _485_B		(0x4000)
+ChangeMemory_B	equ	(0x8000)
+//-------------------------------------------------------------------------------
+//           ***** Init UART *****
+//-------------------------------------------------------------------------------
+/*
+Const_115200	equ	SMCLK_f/115200		;
+Const_57600	equ	SMCLK_f/57600		;
+Const_19200	equ	SMCLK_f/19200		;
+Const_9600	equ	SMCLK_f/9600		;
+*/
+
+//RS485_BRD	equ	(SMCLK_f/RS485_SPEED)
+//RS485_MOD	equ	((SMCLK_f*11/RS485_SPEED)-(RS485_BRD*11))<<1
+//RS485_3_5ch	equ	(TACLK_f*MODBUS_CHAR_TIMEOUT*11/RS485_SPEED) 	        // 10ch => 11bit for 19200 ... 115200 
+// http://www.modbus.org/ (...value of 1.750ms for inter-frame delay (t3.5))
+//RS485_T_pack	equ	((LENGTH_EXT_WR+Len_task_message+2+MODBUS_CHAR_TIMEOUT)*256*10/RS485_SPEED) 	
+
+InitSerial:
+                ret
+//==============================================================================
+EUSCI_A0_VEC
+USCI_A0_VEC
+
+		RETI
+//==============================================================================
+//==============================================================================
+RdMax	  equ	9
+WrMax	  equ	9
+
+NWK_Message	equ	0x40
+NWK_ReadMemory	equ	0x41
+NWK_WriteMemory	equ	0x42
+
+#define ID_ErrFrameField	0x0080			// ID Error Frame field
+#define ID_NwkFrameField	0x0040			// ID NWK frame = 1
+#define ID_NwkNC		0x0020			// ID NWK frame = 0
+#define ID_RespondField 	0x0010			// ID Respond field
+#define ID_CommandField	 	0x0007			// ID Command field
+#define ID_AppField 		0x0008			// ID App=1
+#define ID_WriteField 		0x0002			// ID Write=1
+#define ID_ReadField 		0x0001			// ID Read=1
+
+#define NWK_FCF 		0			// FCF
+#define NWK_DstAddr 		1			// Addr
+#define NWK_SrcAddr 		2			// src Addr
+#define NWK_SnFrame		3			// SN frame
+#define NWK_adrREG		3			// adr REG
+#define NWK_fileREG		4			// file REG
+#define NWK_Exept		5			// exeption
+
+
+#define NWK_lenFCF 		1			// lenght FCF
+#define NWK_lenDstAddr 		1			// lenght Addr
+#define NWK_lenSrcAddr 		1			// lenght Addr
+#define NWK_lenSnFrame		1			// lenght Sinc frame
+#define NWK_lenCommand		5			// lenght Command frame
+MAX_DATA_MES	= 16
+;------------------------------------------------
+;------------------------------------------------
+FunNotSupport_01:                               ; Functions not support!!!
+		mov.b	#0x01, R10		; R10 = ExceptionCode 1,2,3,4
+ExceptionCode_XX:
+		bis.b	#ID_ErrFrameField, 0(R12) ; add Error bit to Command
+		mov.b	R10, 5(R12)
+		ret              // Start Tx0 !!!
+		
+AddressError_02:		                ; Address Error
+		mov.b	#0x02, R10		; R10 = ExceptionCode 1,2,3,4
+		jmp	ExceptionCode_XX
+NbyteError_03:		                        ; Quantity Nbyte Error!!!
+		mov.b	#0x03, R10		; R10 = ExceptionCode 1,2,3,4
+		jmp	ExceptionCode_XX
+RdWrError_04:		                        ; Read or Write Error!!!
+		mov.b	#0x04, R10		; R10 = ExceptionCode 1,2,3,4
+		jmp	ExceptionCode_XX
+DeviceBusy_06:		                        ; SLAVE DEVICE BUSY, NO RESPOND
+		mov.b	#0x06, R10              	
+		jmp	ExceptionCode_XX
+RouteError_0A:		                	; GATEWAY PATH UNAVAILABLE, ROUTE ERROR	
+		mov.b	#0x0A, R10		
+		jmp	ExceptionCode_XX
+NotRespond_0B:		                        ; SLAVE DEVICE FAILED, NO ACK
+		mov.b	#0x0B, R10              	
+		jmp	ExceptionCode_XX
+SecureError_07:		                        ; Security Mode Error
+		mov.b	#0x07, R10		; R10 = ExceptionCode 1,2,3,4
+		jmp	ExceptionCode_XX
+		
+;------------------------------------------------
+ReadHeaderPack	// @R12 => BlockID --> R7, OffSet --> R8, Nbyte --> R9
+		//mov.b	@R12, R10	; copy Function code --> R10
+		mov.b	4(R12), R7	; read BlockID.Nbyte--> R7
+		mov.b	R7, R9		
+		and	#0xF0, R7
+		rra	R7
+		rra	R7
+		rra	R7
+		rra	R7
+		add	#100, R7	; BlockID --> R7
+		and	#0x0F, R9	; Nbyte --> R9
+		mov.b	3(R12), R8	; OffSet --> R8
+		ret
+//==============================================================================
+FileSystem	// File System 
+		mov	R12, R5
+		add	#5, R5 			// Ptr+5 to DATA
+		call	#ReadHeaderPack	// @R12 => BlockID --> R7, OffSet --> R8, Nbyte --> R9
+		mov	#RdMax, R14
+
+		tst.w	R9		; test zero Nbyte
+		jz	NbyteError_03   ; Quantity Nbyte Error!!!
+		cmp.w	R14, R9		; test Nbyte < RdMax+1
+		jhs	NbyteError_03   ; Quantity Nbyte Error!!!
+		call	#BlockToRealAddr // R7=BlockID, R8=OffSet, R9=Nbyte, -> R15=SizeBlocl, R7=StartAddrBlock, R8=Address, R11=low ACCESS LEVEL & high  LOCATION
+		jnz	AddressError_02	; error if not real block or address overflow
+		call	#TstAddrBlock 	
+		jnz	AddressError_02	; error if address overflow
+		call	#TestAccessRdAddr; test access address to read, Ok = Z
+		jnz	RdWrError_04    ; Read or Write Error!!!
+
+		bit.b	#ID_WriteField, 0(R12)
+		jnz	FS_Write
+		bit.b	#ID_ReadField, 0(R12)
+		jz	FunNotSupport_01
+//==================================		
+FS_Read		// File System Read
+		swpb	R11
+                and.b	#MaskLocation, R11 	; test Location memory
+		jz	RdData_43
+		cmp.b	#MEM_RAM, R11
+		jeq	RdData_43
+		cmp.b	#VIRTUAL, R11
+		jeq	VirtualRd_43
+		jmp	RdWrError_04
+//-----------------		
+RdData_43:	
+	     //dint
+	     //nop
+LoopRdData_	     
+		mov.b	@R8+, 0(R5)
+#ifdef CLR_AFTER_READ
+                call    #ClrAfterRead
+#endif
+		inc	R5
+		dec	R9
+		jnz	LoopRdData_
+  	    //eint		
+InitTx		
+		ret
+//-----------------		
+VirtualRd_43		
+	     //dint
+	     //nop
+VirtualRd_	     
+		mov	@R8+, R11
+		mov.b	@R11, 0(R5)
+		inc	R5
+		dec	R9
+		jnz	VirtualRd_ 
+  	     //eint		
+		jmp	InitTx
+//==================================		
+FS_Write	// File System Write
+		swpb	R11
+                and.b	#MaskLocation, R11 	; test Location memory
+		jz	FlashWr_44
+		cmp.b	#MEM_RAM, R11
+		jeq	RamWr_44
+		jmp	RdWrError_04
+//-----------------		
+  RamWr_44:	
+	     //dint
+	     //nop
+RamWr_	     
+		mov.b	@R5+, 0(R8)
+		inc.w	R8
+		dec.w	R9
+		jnz	RamWr_
+  	     //eint		
+		jmp	InitTx
+//-----------------		
+  FlashWr_44:
+                mov	R5, R7            	;  R7-Buffer Data
+		push	R13
+		call	#FR_WRITE   		// @R7 -> @R8 N=R9
+		pop	R13
+  		jmp	InitTx
+//==============================================================================
+//==============================================================================
+TestAccessWrAddr:
+		mov.w	R11, R10
+		and.w	#MaskWrX, R10	; test only WrX!!!
+		cmp.w	#MaskWrX, R10
+		jmp	TstAA
+TestAccessRdAddr:
+		mov.w	R11, R10
+		and.w	#MaskRdX, R10  	; test only RdX!!!
+		cmp.w	#MaskRdX, R10
+	TstAA:	jz      ReturnError
+		jmp	ReturnOk        ; return status Ok!
+;------------------------------------------------
+BlockToRealAddr:        // R7=BlockID, R8=OffSet, R9=Nbyte, -> R15=SizeBlocl, R7=StartAddrBlock, R8=Address, R11=low ACCESS LEVEL & high  LOCATION
+                mov.w	#Block_Header, R10
+  NextBlock:		
+		cmp.b   @R10, R7
+		jeq     ReturnOk    	; Present Block
+		add.w	#16, R10
+		cmp.w	#EndBlock_Header, R10
+		jlo    	NextBlock  	; Not Block
+ReturnError:
+  		clrz                    ; return status Error!
+                ret
+TstAddrBlock:
+                incd	R10
+		mov.w	@R10+, R11	; R11 - low ACCESS LEVEL & high  LOCATION
+		mov.w	@R10+, R7	; R7 - Start Address Block
+                incd	R10
+		mov.w	@R10+, R15	; R15 - Size Block
+                incd	R10
+                mov.w   @R10+, R6     	; проверить! (R6) - PTR  for PTR_TUPE_BLOCK
+		
+		mov.w	R8, R10         ; test Offset+Nbyte < SizeBlock
+		add.w	R9, R10
+		cmp.w	R10, R15         ; R15 - Size Block
+		jlo	ReturnError
+		add.w	R7, R8  	; calc	Address to read or write
+ReturnOk:		
+		setz                    ; return status Ok!
+		ret
+//==============================================================================
+WaitRxDataUART                                          // wait if Rx UART active
+                ret
+//==============================================================================

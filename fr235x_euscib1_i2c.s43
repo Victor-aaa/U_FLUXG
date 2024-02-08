@@ -1,0 +1,310 @@
+
+//******************************************************************************
+//  MSP430FR235x eUSCI_B1 I2C Master TX/RX bytes 
+//******************************************************************************
+
+//------------------------------------------------------------------------------
+// -----------------  MACRO I2C  ------------------  
+//------------------------------------------------------------------------------
+m_wait_Rx_i2c	MACRO
+		LOCAL	_lll	
+_lll		bit	#I2C_RxOk_B
+		jz	_lll
+	  	ENDM
+//----------------------------------------
+		
+m_wait_Tx_i2c	MACRO
+		LOCAL	_lll	
+_lll		bit	#I2C_TxOk_B
+		jz	_lll
+	  	ENDM
+//----------------------------------------
+m_wait_RDY_i2c	MACRO
+		LOCAL	_lll	
+_lll		
+		bit	#UCBBUSY, &UCB1STATW
+		jnz	_lll
+	  	ENDM
+//----------------------------------------
+m_Reset_i2c	MACRO
+		bis	#UCSWRST, &UCB1CTLW0          		// put eUSCI_B in reset state
+		ENDM
+//------------------------------------------------------------------------------
+
+
+Slave_address  = UCB1I2CSA
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+Init_USCI_I2C_B1         // Configure USCI_B1 for I2C mode
+		call	#BusClearI2C
+		bis	#UCSWRST, &UCB1CTLW0          		// put eUSCI_B in reset state
+		mov     #UCSWRST|UCMODE_3|UCMST|UCSYNC|UCSSEL_3, &UCB1CTLW0 	// I2C master mode, SMCLK
+		mov	#(SMCLK_f/400000)+1, &UCB1BRW           // baudrate = 400kHz
+		bic	#UCSWRST, &UCB1CTLW0          		// clear reset register
+		setz	// ok
+		ret
+//--------------		
+BusClearI2C
+		bic.b	#SCL|SDA, &P4SEL0  // P4   to I/O
+		bis.b	#SCL_DIR	// 
+		bic.b	#SCL_OUT	// SCL=0 
+		push	R12
+		bis.b	#SDA_DIR	// SDA=0 Pdir(SDA)=1 на линиях SCL и SDA получился ноль - исходная позиция для STOP.
+		bis.b	#SCL_OUT	// SCL=1 Pout(SCL)=1  
+		push	R13
+		bic.b	#SDA_DIR	// SDA=1 Pdir(SDA)=0 провёл 1й STOP на шине.
+		mov	#9, R13         // 9 CLK
+_l_10_clk	  bis.b	#SCL_OUT	// SCL=1
+		  mov	#5, R12      // 5uS
+        	  call    #halMcuWaitUs
+		  bic.b	#SCL_OUT	// SCL=0
+		  mov	#5, R12      // 5uS
+        	  call    #halMcuWaitUs
+		dec	R13
+		jnz	_l_10_clk
+		bis.b	#SDA_DIR	// SDA=0 на линиях SCL и SDA ноль - исходная позиция для второго STOP.
+		bis.b	#SCL_OUT	// SCL=1
+		nop
+		bic.b	#SDA_DIR	// SDA=1 Pdir(SDA)=0 провёл 2й STOP на шине.
+		pop	R13
+		pop	R12
+		bis.b	#SCL|SDA, &P4SEL0  // P4   set IIC module
+		ret                              
+//------------------------------------------------------------------------------
+/*    no used only Rx !
+USCI_I2C_Rx2		// Slave address, AddrREG 
+		mov	#2, &I2C_DataCnt
+USCI_I2C_Rxn		// Slave address, AddrREG, I2C_DataCnt
+	mov	#SlotREG, &I2C_DataPtr
+		bis	#UCSWRST, &UCB1CTLW0          		// put eUSCI_B in reset state
+		bis	#UCASTP_2, &UCB1CTLW1                   // Automatic stop generated after UCB1TBCNT is reached
+		mov	&I2C_DataCnt, &UCB1TBCNT			// number of bytes to be received
+		bic	#UCSWRST|UCTR|UCTXSTT, &UCB1CTLW0      	// clear reset register
+		mov	#UCRXIE0|UCNACKIE|UCSTPIE, &UCB1IE
+		bic	#I2C_Rx_Tx_St_B
+		bis	#UCTXSTT, &UCB1CTLW0 			// I2C start condition
+		clr	&I2C_cntNAC                             // clr cnt NAC
+		ret
+*/		
+//----------------------
+USCI_I2C_Tx2		// Slave address, AddrREG
+		mov	#2, &I2C_TxCnt
+//USCI_I2C_Txn		// Slave address, AddrREG, I2C_TxCnt
+		mov	#0, &I2C_DataCnt
+		mov	#SlotREG, &I2C_TxPtr              // ptr
+USCI_I2C_TxnPtr		// Slave address, I2C_TxCnt, I2C_TxPtr
+		bis	#UCSWRST, &UCB1CTLW0          		// put eUSCI_B in reset state
+		bic	#UCASTP_3, &UCB1CTLW1                   // CLR! Automatic stop generated after UCB1TBCNT
+		bic	#UCSWRST|UCTXSTT, &UCB1CTLW0          	// clear reset register
+		mov	#UCTXIE0|UCNACKIE|UCSTPIE, &UCB1IE
+		bic	#I2C_Rx_Tx_St_B
+		bis	#UCTXSTT|UCTR, &UCB1CTLW0 		// I2C start condition
+		clr	&I2C_cntNAC                             // clr cnt NAC
+		ret
+//----------------------
+USCI_I2C_TxAddr1_RxData2 // Slave address, AddrREG -> SlotREG
+		mov	#2, &I2C_DataCnt
+USCI_I2C_TxAddr1_RxDatan // Slave address, AddrREG, I2C_DataCnt -> SlotREG
+		mov	#1, &I2C_TxCnt			// tx cnt
+_tnrn		mov	#SlotREG, &I2C_DataPtr
+		mov	#SlotREG, &I2C_TxPtr       // ptr
+USCI_I2C_TxAddrn_RxDatan // Slave address, AddrREG, I2C_TxCnt, I2C_DataCnt, I2C_DataPtr, I2C_TxPtr
+		bis	#UCSWRST, &UCB1CTLW0          		// put eUSCI_B in reset state
+		bic     #UCTXSTT|UCTXSTP, &UCB1CTLW0 
+		bic	#UCASTP_3, &UCB1CTLW1 
+		cmp	&I2C_DataPtr, &I2C_TxPtr		// Rx>Tx?
+		jlo     _set_stop_gen
+		bis	#UCASTP_1, &UCB1CTLW1           // если Rx=<Tx interrupt generated after UCB1TBCNT is reached
+		jmp	_go_xx_gen
+_set_stop_gen		
+		bis	#UCASTP_2, &UCB1CTLW1           // если Rx>Tx Automatic stop generated after UCB1TBCNT is reached
+_go_xx_gen	mov	&I2C_DataCnt, &UCB1TBCNT			// number of bytes I2C trsactions
+		bic	#UCSWRST, &UCB1CTLW0          		// clear reset register
+		mov	#UCRXIE0|UCTXIE0|UCNACKIE, &UCB1IE   // разрешаются в прерывании -> UCBCNTIE|UCSTPIE
+		bic	#I2C_Rx_Tx_St_B
+		bis	#I2C_rSTT_B				// repeet Start mode
+		bis	#UCTXSTT|UCTR, &UCB1CTLW0 		// I2C start condition
+		clr	&I2C_cntNAC                             // clr cnt NAC
+		ret
+//------------------------------------------------------------------------------
+// unsigned char USCI_I2C_slave_present(unsigned char slave_address)
+// This function is used to look for a slave address on the I2C bus.  
+//
+// IN:   unsigned char slave_address  =>  Slave Address
+// OUT:  unsigned char                =>  0: address was not found, 
+//                                        1: address found
+//------------------------------------------------------------------------------
+USCI_I2C_slave_present	// R12 slave_address => R12 returnValue = !(UCB1STAT & UCNACKIFG)
+	push.w	&UCB1IE			// store IE register
+	push.w	&UCB1I2CSA		// store slave address
+	clr	&UCB1IE  		// no all interrupt
+  bis	#UCSWRST, &UCB1CTLW0            // put eUSCI_B in reset state
+	mov	R12, &UCB1I2CSA		// set slave address
+		mov   	#10, R12		// delay 10 [uS]
+        	call    #halMcuWaitUs
+	    push  SR
+	    dint
+  bic	#UCSWRST, &UCB1CTLW0          	// clear reset register
+		mov   	#10, R12	// delay 10 [uS]
+        	call    #halMcuWaitUs
+	bis	#UCTR|UCTXSTT|UCTXSTP, &UCB1CTLW0 // I2C TX, start condition
+	mov	#1000, R12		// N = 100
+_w_stp	
+	bit	#UCTXSTP, &UCB1CTLW0
+	jz	_w_ret
+	call	#WaitN_initIIC    	// wait N cyckles & init IIC
+	jnz	_w_stp
+_err_dev
+	mov	#UCNACKIFG, R12
+	jmp	_w_ret_e
+	
+_w_ret	mov	&UCB1IFG, R12           // set status... dint!
+_w_ret_e    pop	SR
+	pop.w	&UCB1I2CSA		// restore slave address
+	pop.w	&UCB1IE			// restore IE register
+	and	#UCNACKIFG, R12          // set Z
+	ret
+	
+WaitN_initIIC    // wait N cyckles & init IIC
+		dec	R12
+		jz      Init_USCI_I2C_B1         // Configure USCI_B1 for I2C mode
+		ret		
+//------------------------------------------------------------------------------
+// unsigned char USCI_I2C_notready()
+// This function is used to check if there is commuincation in progress. 
+//
+// OUT:  unsigned char  =>  0: I2C bus is idle, 
+//                          1: communication is in progress
+//------------------------------------------------------------------------------
+USCI_I2C_notready
+		bit	#UCBBUSY, &UCB1STATW
+		ret
+//--------------		
+USCI_I2C_ACK_POLLING
+		call	#wait_RDY_I2C 		
+		mov	#0, &I2C_TxCnt
+		mov	#0, &I2C_DataCnt
+		call	#USCI_I2C_TxnPtr  // Slave address, I2C_TxCnt, I2C_TxPtr
+wait_RDY_I2C	// ... wait I2C Ready
+		push	R12
+		mov	#1500, R12	// 5mS = 1500
+wait_rdiic	
+		call	#USCI_I2C_notready
+		jz	_ex_poll
+		call	#WaitN_initIIC	// wait N cyckles & init IIC
+		jnz	wait_rdiic
+_ex_poll	pop	R12
+		ret
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+EUSCI_B1_VEC	// I2C vectots
+		ADD 	&UCB1IV, PC		// Add offset to Jump
+		RETI 				// Vector 0: No interrupt
+		RETI 				// Vector 2: Arbitration lost: UCALIFG     Priority: Highest
+		jmp	I2C_UCNACKIFG	// Vector 4: Not acknowledgment: UCNACKIFG
+		RETI 				// Vector 6: Start condition received: UCSTTIFG
+		jmp	I2C_UCSTPIFG		// Vector 8: Stop condition received: UCSTPIFG
+		RETI 				// Vector 10: Slave 3 Data received: UCRXIFG3 		
+		RETI 				// Vector 12: Slave 3 Transmit buffer empty:UCTXIFG3 
+		RETI 				// Vector 14: Slave 2 Data received: UCRXIFG2
+		RETI 				// Vector 16: Slave 2 Transmit buffer empty: UCTXIFG2
+		RETI 				// Vector 18: Slave 1 Data received: UCRXIFG1
+		RETI 				// Vector 20: Slave 1 Transmit buffer empty: UCTXIFG1
+		jmp	I2C_UCRXIFG0	// Vector 22: Data received: UCRXIFG0
+		jmp	I2C_UCTXIFG0 	// Vector 24: Transmit buffer empty: UCTXIFG0
+		jmp	I2C_UCBCNTIFG	// Vector 26: Byte counter zero: UCBCNTIFG
+		RETI 				// Vector 28: Clock low time-out: UCCLTOIFG
+		RETI 				// Vector 30: Nineth bit position: UCBIT9IFG; Priority: Lowest
+		
+//------------ rx isr -------------
+I2C_UCRXIFG0
+	bis	#UCBCNTIE, &UCB1IE   
+		push	R4
+		mov	&I2C_DataPtr, R4          // load Ptr
+		mov.b	UCB1RXBUF_, 0(R4)
+		inc	&I2C_DataPtr              // Ptr++
+		pop	R4
+		dec	&I2C_DataCnt    // for test!!!
+		RETI
+I2C_UCBCNTIFG
+		bis	#UCSTPIE, &UCB1IE   
+		//bis	#I2C_RxOk_B
+		//...             		// Exit LPM0
+_STP_ex		
+		bis	#UCTXSTP, &UCB1CTLW0    // I2C stop condition end Rx
+_ex_i2c_int	RETI
+//---------------------------------		
+I2C_UCNACKIFG
+		inc	&I2C_cntNAC             // cnt NAC ++
+		cmp	#MAX_NAC_N, &I2C_cntNAC
+		jhs     _STP_ex                 // STOP exit
+		bis	#UCTXSTT, &UCB1CTLW0	// UCTXSTT  resend start if NACK
+		RETI
+//------------ tx isr -------------
+I2C_UCTXIFG0
+		tst	&I2C_TxCnt
+		jz      _end_tx_i2c
+		bit	#I2C_Fill_B		// Fill mode
+		jnz	_fill_i2c
+_tx_l		push	R4
+		mov	&I2C_TxPtr, R4          // load Ptr
+		mov.b	@R4+, &UCB1TXBUF_	// Load TX buffer
+		mov	R4, &I2C_TxPtr		// store Ptr
+		dec	&I2C_TxCnt              // Decrement TX byte counter
+		pop	R4
+		RETI
+		
+_Tx_data		
+		mov	&I2C_DataCnt, &I2C_TxCnt	// reload Data cnt
+		clr	&I2C_DataCnt			// reset Data cnt
+		mov	&I2C_DataPtr, &I2C_TxPtr  	// reload Data Ptr
+		jmp	_tx_l				// next Data Tx
+		
+		
+_fill_i2c	
+		cmp	#Buf_OLED, &I2C_TxPtr
+		jeq	_tx_l
+		mov.b	&AddrREG+2, &UCB1TXBUF_	// Load TX buffer
+		dec	&I2C_TxCnt              // Decrement TX byte counter
+		RETI
+		
+_end_tx_i2c                                     // if repiter start clr UCTR, set UCTXSTT
+		bic	#UCTXIFG, &UCB1IFG      // Clear USCI_B1 TX int flag
+		bit	#I2C_rSTT_B		// repeet Start mode
+		jnz	_ReadStartMode
+		tst	&I2C_DataCnt
+		jnz	_Tx_data
+		//bic	#UCTXIFG, &UCB1IFG      // Clear USCI_B1 TX int flag
+		bis	#UCTXSTP, &UCB1CTLW0    // I2C stop condition
+		bic	#I2C_Fill_B
+	//...             		// Exit LPM0
+	//	bis	#I2C_TxOk_B
+		RETI
+_ReadStartMode
+		//bic	#UCTXIFG, &UCB1IFG      // Clear USCI_B1 TX int flag
+		bic	#UCTXSTP|UCTR, &UCB1CTLW0 // to resive, no Stop
+		bis	#UCTXSTT, &UCB1CTLW0	  // resend start 
+		bic	#I2C_rSTT_B	  	  // repeet Start mode
+		RETI
+//---------------------------------		
+I2C_UCSTPIFG					// STOP
+		bis	#I2C_TxOk_B
+		bis	#I2C_RxOk_B
+		bis	#UCSWRST, &UCB1CTLW0    // put eUSCI_B in reset state
+		RETI
+//---------------------------------		
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

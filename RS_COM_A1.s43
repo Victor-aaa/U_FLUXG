@@ -1,0 +1,510 @@
+//------------------------------------------------------------------------------
+//                --------  RS COM A1  ------------
+//------------------------------------------------------------------------------
+ #ifdef	__A1_COM__
+VAL_RSCOM	equ	(TACLK_f*10*10/RSCOM_SPEED) 	// 10char
+
+InitRSCOM_A1
+		bis    #UCSWRST, &UCA1CTLW0  			// Reset
+		mov    #UCSWRST|UCSSEL_2, &UCA1CTLW0  		// SMCLK & Reset
+            	mov     #(SMCLK_f/RSCOM_SPEED), &UCA1BRW 	
+	       	mov   	#((SMCLK_f*11/RSCOM_SPEED)-((SMCLK_f/RSCOM_SPEED)*11))<<1, &UCA1MCTLW    // Modulation UCBRSx
+               	bis.b	#TxD1|RxD1, &P2SEL1 			// P2
+            	bic   #UCSWRST, &UCA1CTLW0      		// **Initialize USCI state machine**
+            	bis     #UCRXIE, &UCA1IE			// Enable USCI_A1 RX interrupt
+		mov	#TxOk_B, &StatusRSCOM			// TxOk_B
+		
+		call	#RS232_ON
+		ret
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+EUSCI_A1_VEC
+            	add     &UCA1IV,PC
+            	reti                            // Vector 0: no interrupt
+            	jmp     RX1IFG_HND              // Vector 2: RXIFG
+		jmp	TX1IFG_HND              // Vector 4: TXIFG
+		jmp	TT1IFG			// Vector 6: UCSTTIFG
+TX1CPTIFG					// Vector 8: UCTXCPTIFG
+		bit	#TxData_B, &StatusMB1	// TxData_B = ?
+		jz	_exA1
+		// RS485 to Rx direction!
+TT1IFG
+_exA1		RETI
+//--------------	
+TX1IFG_HND
+RSCOM_TX_VEC1
+		cmp	#TxBuffer1Len, &TxPtr1  // test buffer end !!!
+		jlo	TstEndTx1
+		bic	#TxData_B, &StatusMB1   // OkData_B = 0
+		bis	#TxErr_B, &StatusMB1    // OkErr_B = 1
+  EndTx1:	
+		bic	#TxCRC_B, &StatusMB1    // TxCRC_B = 0
+		bic   	#UCSPB, &UCA1CTLW0  	// to 1 stop bit
+		bic	#UCTXIFG, &UCA1IFG
+		bis	#TxOk_B, &StatusMB1	// TxOk_B = 1
+		RETI
+  TstEndTx1:
+		bit	#TxData_B, &StatusMB1	// TxData_B = ?
+		jz	EndTx1
+		cmp	&CounterTx1, &TxPtr1	// test buffer end !!!
+		jlo	ToTxByte1
+		bit	#TxCRC_B, &StatusMB1    // TxCRC_B = ?
+		jz	TxCrcLow1
+		mov.b	&CRCINIRES_H, &UCA1TXBUF_L	// U0TXBUF = High CRC16Tx
+		bic	#TxData_B, &StatusMB1	// TxData_B = 1
+		RETI
+  TxCrcLow1:	
+		mov.b	&CRCINIRES_L, &UCA1TXBUF_L	// U0TXBUF = low CRC16Tx
+		bis	#TxCRC_B, &StatusMB1	// TxCRC_B = 1
+		RETI
+  ToTxByte1:
+		push	R5
+		mov	&TxPtr1, R5
+		mov.b	TxBuffer1(R5), R5
+		mov	R5, &UCA1TXBUF 		// Tx buffer
+		mov.b	R5, &CRCDIRB_L		// Item to Data CRC16
+		inc	&TxPtr1
+		pop	R5
+
+		RETI
+		
+//--------------	
+RX1IFG_HND      
+RSCOM_RX_VEC1
+		push	R4
+		bit	#RxData_B, &StatusMB1  	// RxData_B = 0?
+		jc      TstBufEnd1
+	//	bit	#UCIDLE, &UCA1STATW	// idle ?
+	//	jz	ExVecRX1                // not IDLE  -- exit --
+IDLE_Ok1	
+		bis	#RxData_B, &StatusMB1  	// RxData_B = 1
+		bic	#OkCRC_B, &StatusMB1   	// OkCRC_B = 0
+		mov	#0xFFFF, &CRCINIRES	// INIT to CRCINIRES
+		clr.w	R4        		// clr RxPtr
+		mov.w	R4, &RxPtr1
+                jmp	DataToBuf1
+		
+  TstBufEnd1:	
+		mov.w	&RxPtr1, R4
+		cmp.w	#BufferLentgh, R4   	// test buffer end !!!
+		jhs	RxEnd1
+		cmp.w	#2, R4      		// test RxPtr < 2
+		jlo	DataToBuf1
+		mov.b	RxBuffer1-2(R4), &CRCDI_L	// Item to Data CRC16
+  DataToBuf1:
+		mov.b	&UCA1RXBUF_L, RxBuffer1(R4)
+		inc	&RxPtr1
+		mov	&TA0R, R4
+		add	&VAL_RSCOM, R4
+		mov	R4, &TA0CCR1		// CCR1 = TAR+Const2_5ch
+		mov   #CCIE, &TA0CCTL1          // CCR1 interrupt enabled
+  ExVecRX1:
+		pop	R4
+		RETI
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+TMRA_UART1: 					// Vector 2: TACCR1
+		push	R4
+		push	R5
+		mov	&RxPtr1, R4             // --- read CRC from RxBuffer-2 to R5 ---
+		add	#RxBuffer1-2, R4
+		mov.b	@R4+, R5		// Lo CRC16
+		clr.b	-1(R4)			// clr after resive CRC16 only Low byte! (надо!)
+		mov.b	@R4, R4			// Hi CRC16
+		swpb	R4
+		add	R5, R4			// --- read CRC from RxBuffer-2 to R5 ---
+  		pop	R5
+	
+		cmp	&CRCINIRES, R4
+                jeq	RxCrcOk1			
+	/*	bit	#SERIAL_CRC_OFF_B, &C_FLAGS
+		jz	RxEnd1                  // -- exit CRC BAD!!! --
+		cmp	#0xAA55, R4
+	//	cmp	#(CR+(256*LF)), R4
+		jne	RxEnd1                  // -- exit 0x55AA BAD!!! --
+*/		
+RxCrcOk1	bis	#OkCRC_B, &StatusMB1	// OkCRC_B = 1
+    RxEnd1:	
+		bis	#RxOk_B, &StatusMB1	// RxOk_B = 1
+		bic	#RxData_B, &StatusMB1  	// RxData_B = 0
+		clr   	&TA0CCTL1         	// CCR1 interrupt disable
+		pop	R4
+		RETI
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+InitTxCOM:
+		clr	&TxPtr1			; TxPtr = 0x0000
+		mov	#0xFFFF, &CRCINIRES	; INIT to CRCINIRES
+		bic	#TxOk_B, &StatusRSCOM	; TxOk_B = 0
+		bis	#TxData_B, &StatusRSCOM	; TxData_B = 1
+		bis.b	#UCTXADDR, &UCA1CTL1	; TXWAKE = 1, 10bit timeout
+	#ifdef TxRx1_B		
+		bis.b   #UCSPB, &UCA1CTL0  	; 2 stop
+	#endif		
+            	bis     #UCTXIE, &UCA1IE	; Enable USCI_A1 TX interrupt
+		bis	#UCTXIFG, &UCA1IFG      ; Start Tx !!!	
+_ex_in_tx	ret
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+//==============================================================================
+//           ***** Service Network  *****
+//==============================================================================
+ServiceNWK
+		bit	#UW_DATA_RDY_B, &StatusAPP 	// Rx pack decode Ok!
+		jz	Serv_Uart1
+		bic	#UW_DATA_RDY_B, &StatusAPP 	// Rx pack sflush
+		mov	#BUFFER_DATA, R12
+		bis.b	#UW_B, 0(R12)	// set temporary bit UW_B BIT2.FCF
+		jmp	ServiceFCF
+Serv_Uart1
+		bit	#RxOk_B, &StatusMB1	; RxOk_B ?
+		jz 	ExServUart
+	//	bit	#TxOk_B, &StatusMB1	; TxData_B ?
+	//	jz	ExServUart
+		bic	#RxOk_B, &StatusMB1	; RxOk_B = 0
+		bit	#OkCRC_B, &StatusMB1	; OkCRC_B = ?
+		jz	ExServUart
+		bis	#HostConnect_B, &StatusMB1// Host connect
+		mov	#RxBuffer1, R12
+		call	#Clr_UW			// clr UW	
+		jmp	ServiceFCF
+//==============================================================================
+HOST_ADDR  = 0x00
+BRODCAST_ADDR = 0x3F
+UW_B = BIT2
+ERR_BUZY   =  137
+ERR_UNSUPPORT = 129
+//==============================================================================
+ServiceFCF
+		call	#Test_FCF		// R12-ptr FCF,  R15 - index jmp	
+		jnz	Frame_UNKNOWN
+		add 	R15, PC			// Add offset to Jump table
+		jmp	Exept_UnSuport	// (0)
+		jmp	_nc		// (1)
+                jmp	_RS_UW_Mod	// (2)	
+                jmp	_UW_RS_Mod	// (3)
+		jmp	_nc		// (4)
+		jmp	_nc		// (5)
+                jmp	_nc		// (6)
+		jmp	_nc		// (7)
+		jmp	_UW_UW_Navi	// (8) запрос My addr Navi
+		jmp	_UW_RS_Navi	// (9) ответ My addr Navi
+		jmp	_RS_UW_ReqNavi  // (A) запрос all addr Navi
+                jmp	_UW_RespNavi 	// (B) ответ all addr Navi
+                jmp	_RSUW_File	// (C) .. и отправка в RS или UW
+                jmp	_UW_RS		// (D) отправка в RS
+                jmp	_RS_UW		// (E)
+                jmp	_UW_RS		// (F)
+//----------------
+_RS_UW_Mod
+		call	#Test_UW		// source UW?		
+		jnz	_UW_RS_Mod		// transmit to RS
+_RS_UW
+		mov.b	&C_DEVICE_ADDR, 2(R12)	// set myAddr
+		bit	#MODEM_BUZY_B, &StatusAPP		// Buzy ?
+	//	jnz	Exept_ModemBuzy
+_Transmit_UW	
+		mov	#BUFFER_DATA, R13	// -> BUFFER_DATA
+		call	#Copy16LRCalc		// copy & LRCa calc 16byte @R12-> @R13
+		call	#START_TRANSMIT_PACK	// delay TrancmitPack -> Transmit
+_nc
+ExServFCF	
+ExServUart	
+		ret
+//----------------
+_UW_RS_Mod
+_UW_RS
+		call	#Clr_UW			// clr UW	
+		mov	#TxBuffer1, R13		// -> TxBuffer1
+		call	#Copy16b		// copy 16byte @R12-> @R13 (R14)
+		mov	#Len_Data, &CounterTx1	// counter Tx
+		call	#InitTxCOM		// tx R12 byte + CRC16
+		ret
+//----------------
+_RSUW_File
+		call	#FileSystem		// File System MFS5
+		call	#SetRespondPack		// set respond 
+		call	#Test_UW		// source UW?		
+		jnz	_Transmit_UW		// transmit to UW
+		mov.b	&C_DEVICE_ADDR, 2(R12)	// set myAddr if RS
+_TxBuff__	mov	#TxBuffer1, R13		// -> TxBuffer1
+		call	#Copy16LRCalc		// copy & LRCa calc 16byte @R12-> @R13
+		mov	#Len_Data, &CounterTx1	// counter Tx
+		call	#InitTxCOM		// tx R12 byte + CRC16
+		ret
+//-------------------------------------
+_RS_UW_ReqNavi
+		call	#Test_UW		// source UW?		
+		jnz	_UW_ReqNavi_PBS		// UW resiv PBS Navi
+		call	#IncSN			// SN++
+		mov.b	&st_SN, 3(R12)		// SN
+						// set Depth,Temp,Status
+		mov	&D_DEPTH, 10(R12)	// Depth
+		mov	&D_TEMP, 12(R12)	// Temp
+		mov.b	&D_STATUS, 14(R12)	// Status
+		jmp	_RS_UW
+		
+_UW_ReqNavi_PBS // Navi Passive Base Station 
+		bit	#BASE_STATION_B, &D_STATUS		// Base Station?
+		jz	ExServFCF
+		mov.b	NWK_DstAddr(R12), &SN_ID_ResivPBS	// request >>>
+		mov.b	NWK_SnFrame(R12), &SN_ID_ResivPBS+1	// Navi Passive Base Station hi-SN, lo-ID
+		jmp	ExServFCF
+//----------------
+_UW_RespNavi	// Navi Passive Base Station 
+		call	#Test_UW		// source UW?		
+		jz	Exept_UnSuport		// from RS --> err UnSupported!
+		bit	#BASE_STATION_B, &D_STATUS		// Base Station?
+		jz	ExServFCF
+		cmp.b	NWK_DstAddr(R12), &SN_ID_ResivPBS	// +0 Addr?
+		jne	ExServFCF
+		cmp.b	NWK_SnFrame(R12), &SN_ID_ResivPBS+1	// +1 SN?
+		jne	ExServFCF
+	//	call	#Clr_UW			// clr UW	
+		mov.b	&C_DEVICE_ADDR, 2(R12)	// set myAddr if UW PBS
+		mov	#TxBuffer1, R13		// -> TxBuffer1
+		call	#Copy16b		// copy 16byte @R12-> @R13 (R14)
+		
+		call	#Calc_TimeDelayPack_PBS	// [uS] time DelayPack  Passive Base Station
+		jmp	_rs_navi		
+//----------------
+_UW_RS_Navi	
+		call	#Test_UW		// source UW?		
+		jz	Exept_UnSuport		// from RS --> err UnSupported!
+	//	call	#Clr_UW			// clr UW	
+		mov	#TxBuffer1, R13		// -> TxBuffer1
+		call	#Copy16b		// copy 16byte @R12-> @R13 (R14)
+		
+		call	#Calc_TimeDelayPack	// [uS] time DelayPack 
+       _rs_navi:
+       		mov	R14, &st_DelayPack	// status...
+      		mov	R15, &st_DelayPack+2
+		mov	R14, 0(R13)		// add local Parameters!!!
+		mov	R15, 2(R13) 		// ptr R13 - end pack
+		mov	&D_DEPTH, 4(R13)
+		mov	&D_TEMP, 6(R13)
+		mov	&D_STATUS, 8(R13)
+		mov	#Len_Data+10, &CounterTx1 // cnt Tx
+		call	#InitTxCOM		// tx R12 byte + CRC16
+		ret
+//----------------
+_UW_UW_Navi
+		call	#Test_UW		// source UW?		
+		jz	Exept_UnSuport		// from RS --> err UnSupported!
+		tst	4(R12)			// X
+		jz	setParam
+		mov	4(R12), &D_X_COORD	// X
+		mov	6(R12), &D_Y_COORD	// Y
+      setParam:		
+		mov	&D_DEPTH, 10(R12)	// Depth
+		mov	&D_TEMP, 12(R12)	// Temp
+		mov.b	&D_STATUS, 14(R12)	// Status
+		call	#SetRespondPack		// set respond 
+		bis	#NAV_POLING_B, &StatusAPP // navigation pollings!
+		clr	&Tmr_NAV_POLLING	  // clr Tmr pollings!
+_Respond_UW	
+		mov	#BUFFER_DATA, R13	// -> BUFFER_DATA
+		call	#Copy16LRCalc		// copy & LRCa calc 16byte @R12-> @R13
+		call	#START_RESPONSE_PACK	// delay Respopnse Pack -> Transmit
+		ret
+//-------------------------------------
+//==============================================
+Frame_NOT_MY
+Frame_UNKNOWN
+		ret
+Exept_UnSuport
+		mov.b	#ERR_UNSUPPORT, 5(R12)
+		jmp	_exept_Error
+//--------------		
+Exept_ModemBuzy
+		mov.b	#ERR_BUZY, 5(R12)
+_exept_Error
+		mov.b	&C_DEVICE_ADDR, 2(R12)	// set myAddr
+		bis.b	#ID_ErrFrameField, 0(R12)
+		call	#SetRespondPack		// set respond 
+		call	#Test_UW		// source UW?		
+		jnz	_Transmit_UW		// transmit to UW
+		jmp	_TxBuff__		// to RS
+//==============================================
+SetRespondPack	// set respond 
+		bis.b	#ID_RespondField, 0(R12)
+		ret
+Test_UW		// source UW?
+		bit.b	#UW_B, 0(R12)	// temporary bit BIT2.FCF
+Clr_UW		// clr UW
+		bic.b	#UW_B, 0(R12)
+		ret
+//=================
+Copy16b		mov	#16, R14
+		br	#CopyData       // src - R12, dst - R13,  length - R14
+//=================
+/*Copy16LRCheck		// copy & LRCb check 16byte @R12-> @R13 
+		clr.b	&LRCb
+		mov	#15, R14	// 15 + LRC
+_loop16lrcb	mov	@R12+, R15
+		xor.b	R15, &LRCb
+		mov.b	R15, 0(R13)
+		inc	R13
+		dec	R14
+		jnz	_loop16lrcb
+		cmp.b	&LRCb, 0(R13)
+		inc	R13
+		ret
+*/		
+//=================
+Copy16LRCalc		// copy & LRCa calc 16byte @R12-> @R13 
+/*		mov	#0xFFFF, &CRCINIRES	; INIT to CRCINIRES
+		mov	#15, R14	// 15 + LRC
+_loop16lrca	mov.b	@R12+, R15
+		mov.b	R15, &CRCDI_L	// Item to Data CRC16
+		mov.b	R15, 0(R13)
+		inc	R13
+		dec	R14
+		jnz	_loop16lrca
+		mov	&CRCINIRES, R15
+		mov.b	R15, 0(R13)
+		mov.b	R15, &LRCa
+		inc	R13
+		ret
+
+*/
+		mov.b	#0x55, &LRCa
+		mov	#15, R14	// 15 + LRC
+_loop16lrca	mov.b	@R12+, R15
+		add.b	R15, &LRCa
+		mov.b	R15, 0(R13)
+		inc	R13
+		dec	R14
+		jnz	_loop16lrca
+		mov.b	&LRCa, 0(R13)
+		inc	R13
+		ret  
+//=================
+LRCalc		// LRCa calc 16byte @R12
+/*		mov	#0xFFFF, &CRCINIRES	; INIT to CRCINIRES
+		mov	#15, R14	// 15 + LRC
+_loopLRC	mov.b	@R12+, &CRCDI_L	// Item to Data CRC16
+		dec.b	R14
+		jnz	_loopLRC
+		mov	&CRCINIRES, R14
+		mov.b	R14, &LRCa
+		ret
+*/
+		mov.b	#0x55, &LRCa
+		mov	#15, R14	// 15 + LRC
+_loopLRC	add.b	@R12+, &LRCa
+		dec.b	R14
+		jnz	_loopLRC
+		ret
+		
+//=================
+IncSN		// SN++
+		inc.b	&st_SN
+		jnz	_ex_sn
+		inc.b	&st_SN
+_ex_sn		ret
+//=================
+//==============================================================================
+Test_FCF		// R12-ptr NWK --> R15 - index jmp
+		push	R12		// store ptr FCF
+		mov.b	@R12+, R14			// FCF
+		bit.b	#ID_NwkNC, R14			// test FCF bits
+		jnz	_false
+		bit.b	#ID_NwkFrameField, R14	
+		jz	_false
+		
+		mov.b	@R12+, R15			// R15 - dstAddr
+		mov.b	@R12, R12			// R12 - srcAddr
+	//	mov.b	R12, R13
+	//	bit.b	#BIT6, R15
+	//	rrc.b	R13
+	//	bit.b	#BIT7, R15
+	//	rrc.b	R13				
+	//	and.b	#0xF0, R13		// Channels... [7-4bits]	not Use!
+		
+		bit	#ID_RespondField, R14           // FCF
+		jnz      _ad_ok
+		mov.b	R15, R12			// R15 - srcAddr
+_ad_ok		
+		clr	R15				// reset bit adder
+		bit	#ID_AppField, R14		 // APP bit  FCF
+		rlc.b   R15
+		bit	#ID_ReadField+ID_WriteField, R14 // RD WR bit FCF
+		rlc.b   R15
+
+		cmp	#HOST_ADDR, R12
+		jeq	_ok_myadr
+		cmp.b	&C_DEVICE_ADDR, R12
+		jeq     _ok_myadr
+		setc
+		jmp	_ok_addr
+_ok_myadr
+		clrc
+_ok_addr	rlc.b   R15
+		bit	#ID_RespondField, R14		// FCF
+		rlc.b   R15
+		
+		rla.b	R15	// *2
+		pop	R12		// restore ptr FCF
+_all_true	setz
+		ret
+_false		
+		pop	R12		// restore ptr FCF
+_all_false	clrz
+		ret
+//==============================================================================
+InitPowerOnMessage		// init PowOn Message
+		mov	#StartUWM_msg, R12	// copy Header
+		mov	#BUFFER_DATA, R13
+		mov	#Len_Data, R14
+		call	#CopyData               // src - R12, dst - R13,  length - R14
+		
+		mov	#Block_Info+4, R12	// copy Version info
+		mov	#BUFFER_DATA+3, R13
+		mov	#9, R14
+		call	#CopyData               // src - R12, dst - R13,  length - R14
+		
+		mov	#BUFFER_DATA, R12
+		mov.b	&C_DEVICE_ADDR, 2(R12)	// DEVICE_ADDR
+		mov.b	&D_STATUS, 14(R12)	// Status
+		call	#LRCalc			// LRCa calc 16byte @R12
+		mov.b	&LRCa, 0(R12)		// set LRC
+		ret
+//==============================================================================
+   #endif
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

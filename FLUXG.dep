@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+    <fileVersion>2</fileVersion>
+    <fileChecksum>3091998641</fileChecksum>
+    <configuration>
+        <name>Debug</name>
+        <outputs>
+            <file>$PROJ_DIR$\MATH_LIB_.s43</file>
+            <file>$PROJ_DIR$\Debug\Obj\FLUXG_01.r43</file>
+            <file>$PROJ_DIR$\Debug\Exe\FLUXG.d43</file>
+            <file>$TOOLKIT_DIR$\inc\msp430fr6972.h</file>
+            <file>$PROJ_DIR$\Global.h</file>
+            <file>$PROJ_DIR$\ToDo_FLUXG.h</file>
+            <file>$PROJ_DIR$\MACRO_1.s43</file>
+            <file>$PROJ_DIR$\FLUXG_01_def.h</file>
+            <file>$PROJ_DIR$\FR_A_Utils.s43</file>
+            <file>$PROJ_DIR$\FLUXG_01_Scr_Menu.s43</file>
+            <file>$TOOLKIT_DIR$\lib\dlib\dl430xlsfn.r43</file>
+            <file>$PROJ_DIR$\Debug\List\FLUXG_01.lst</file>
+            <file>$PROJ_DIR$\..\UWM\UWM_01_Block_def.h</file>
+            <file>$PROJ_DIR$\..\U_ELECTRO\UELEC_01_def.h</file>
+            <file>$PROJ_DIR$\FLUXG_01.s43</file>
+            <file>$PROJ_DIR$\Debug\List\FLUXG.map</file>
+            <file>$TOOLKIT_DIR$\config\linker\lnk430fr6972.xcl</file>
+            <file>$TOOLKIT_DIR$\config\linker\multiplier32.xcl</file>
+            <file>$PROJ_DIR$\AD9833.s43</file>
+            <file>$PROJ_DIR$\BlockDef.h</file>
+            <file>$PROJ_DIR$\FLUXG_01_Function.s43</file>
+            <file>$PROJ_DIR$\FLUXG_01_Mesage.s43</file>
+            <file>$PROJ_DIR$\OLED_SSD1309_I2C.s43</file>
+            <file>$PROJ_DIR$\eUSCI_B0_I2C.s43</file>
+            <file>$PROJ_DIR$\MS5837_30.s43</file>
+            <file>$PROJ_DIR$\8X8X.inc</file>
+            <file>$PROJ_DIR$\8x16x.inc</file>
+            <file>$PROJ_DIR$\SCRIPT_FR.s43</file>
+            <file>$PROJ_DIR$\lcd_ton.h</file>
+            <file>$PROJ_DIR$\AtanU.s43</file>
+            <file>$PROJ_DIR$\FLUXG_01_RELAY.s43</file>
+            <file>$PROJ_DIR$\FLUXG_01_ADC12.s43</file>
+            <file>$PROJ_DIR$\FLUXG_01_Block_def.h</file>
+            <file>$PROJ_DIR$\ModBus5x2com.s43</file>
+        </outputs>
+        <file>
+            <name>[ROOT_NODE]</name>
+            <outputs>
+                <tool>
+                    <name>XLINK</name>
+                    <file> 2 15</file>
+                </tool>
+            </outputs>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\Debug\Exe\FLUXG.d43</name>
+            <outputs>
+                <tool>
+                    <name>XLINK</name>
+                    <file> 15</file>
+                </tool>
+            </outputs>
+            <inputs>
+                <tool>
+                    <name>XLINK</name>
+                    <file> 16 17 1</file>
+                </tool>
+            </inputs>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\FLUXG_01.s43</name>
+            <outputs>
+                <tool>
+                    <name>A430</name>
+                    <file> 1 11</file>
+                </tool>
+            </outputs>
+            <inputs>
+                <tool>
+                    <name>A430</name>
+                    <file> 5 3 4 6 7 8 0 33 21 23 31 20 22 24 18 27 25 26 28 32 19 9</file>
+                </tool>
+            </inputs>
+        </file>
+    </configuration>
+    <configuration>
+        <name>Release</name>
+        <outputs />
+        <forcedrebuild>
+            <name>[MULTI_TOOL]</name>
+            <tool>XLINK</tool>
+        </forcedrebuild>
+    </configuration>
+</project>

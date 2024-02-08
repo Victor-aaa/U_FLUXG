@@ -1,0 +1,970 @@
+//============================================================================================================
+//                               SCRIPT
+//============================================================================================================
+#ifndef SCRIPT_INCLUDE
+#define SCRIPT_INCLUDE
+#endif
+//===================================================================================
+//            Warning!!! Stop Macro if change macro file!
+// Kn - Key function 				'K[n=1-250]'....,CR,LF
+// MnX - Menu function 				'M[n=1-250]'....,CR,LF   M1x - short PB, M1X - long PB
+
+// CA - Clear LCD                               'CA',CR,LF
+// CL - Clear line to end --- not used!
+// G1 - Graph logo format BMP     		'G1',CR,LF
+// T1 - Text low CharGen        		'T1y02x10:1234567890',CR,LF	
+// T2 - Text big CharGen        		'T2y04x50:asdfghjkl;',CR,LF
+// P  - Print Register                       	'P104s1n1d0k2',CR,LF       	-> [n=1,2,4]
+//                                              'P104s1n1/10d0k2',CR,LF       	-> [n=1,2,4]  /10
+// W  - Memory change                       	'W105s2n2[c]1',CR,LF 		-> [n=1,2],[c,s,x,w,a]
+// N  - NWK transfer				'N4001b105s2n2>0b105s2n2',CR,LF
+
+// IF 						'IF105s2n2[&]1',CR,LF 		-> [n=1,2],[&,<,>=,=]
+// EL[S]
+// EN[D]
+
+// b - block
+// s - shift, offset
+// n - length byte (1,2,[4])
+// k - length digit [zero cut-0, digits (1-8)]
+// y - line (0-7)
+// x - column (0-127)
+// / - divide 10 or 100
+// d - register DEC [pointer(0-4)], [zero cut-0, digits (1-8)]
+// h - register HEX [
+// : - start string
+// CR, LF - end string
+//===================================================================================
+#define FALSE_B	 	BIT0 	// 1 - False, 0 - True
+#define PREV_FALSE_B	BIT1 	// 1 - False, 0 - True
+ServiceSCRIPT  	
+                bit     #RefreshScript_B, &StatusAPP         // refresh SCRIPT (full time multitask 20mS)
+		jz	_ex_scrpt
+		bit	#StopScript_B, &StatusAPP
+		jnz	Reset_ptr_script
+  #ifndef  _MULTY_TASK_	
+		call	#TEST_EMERGENCY_STATE
+		jnz	_ex_scrpt
+  #endif
+_decode_next		
+                mov	&ptr_ServScript, R12
+		cmp	#Block_TextTask, R12
+		jlo	Reset_ptr_script
+		cmp	#Block_TextTask+SizeBlock_TextTask, R12
+                jhs	Reset_ptr_script
+_decode_	
+		call	#DECODE_COM		// decode ALL COMMAND
+		mov	SR, R14     		// status обработки текущей записи
+		call	#FndNextCOMMAND 	// Z=NEXT! R12-ptr (R9, R10, R11, R13)
+		jnz	End_script		// ¬ыход в MAIN если конец скрипта!
+                mov	R12, &ptr_ServScript    // сохранение поинтера скрипта
+		bit	#Z, R14     		// status обработки текущей записи
+		jnc	_decode_next            // если небыло обработано ни одной записи
+_ex_scrpt	ret                             // exit если была обработана одна запись
+
+End_script
+		//call	#ServiceGraf       	// Graf...
+#ifdef __E_inc__
+		call	#E_inc_Display_Refresh_Quick
+#endif
+
+Reset_ptr_script
+                bic     #RefreshScript_B, &StatusAPP
+		clr.b   &IF_STACK
+		mov	#Block_TextTask, &ptr_ServScript
+		clrz
+		ret
+//===================================================================================
+TEST_EMERGENCY_STATE
+		bit	#LOW_NOISE_MODE_B, &StatusAPP
+		jnz	ex_e
+  #ifdef  __RF_MODUL__
+		tst.b	&tx_StateMachune
+		jnz	ex_e
+		bit.b	#CC2520_RX_FRM_DONE_PIN	 // GPIO0_CC2520		
+		jnz	ex_e
+		bit	#APP_MAC_B|wait_tx_ACK_B, &StatusRF0
+  #endif	
+ex_e		ret
+//===================================================================================
+//===================================================================================
+#define C_PB_SHORT  'x' 
+#define C_PB_LONG   'X' 
+#define C_PB_UP      1
+#define C_PB_DN      2
+#define C_PB_RIGHT   3
+#define C_PB_LEFT    4
+/*
+//===================================		
+ServiceKBD                                
+		call	#TEST_EMERGENCY_STATE
+		jnz	ex_e
+		bit.b	#PB_UP
+		jz	_tk2
+		bic.b	#PB_UP
+		mov	#C_PB_UP, R14		// R14 - num KEY = 1
+		call	#SetChangeMEMORY	// set ChangeMemory_B	
+		jmp	ScriptKBD
+	_tk2:	
+		bit.b	#PB_DN
+		jz	_tk3
+		bic.b	#PB_DN
+		mov	#C_PB_DN, R14		// R14 - num KEY = 2	
+		call	#SetChangeMEMORY	// set ChangeMemory_B	
+		jmp	ScriptKBD
+	_tk3:	
+		bit.b	#PB_RIGHT
+		jz	_tk4
+		bic.b	#PB_RIGHT
+		mov	#C_PB_RIGHT, R14	// R14 - num KEY = 3	
+		call	#SetChangeMEMORY	// set ChangeMemory_B	
+		jmp	ScriptKBD
+	_tk4:	
+		bit.b	#PB_LEFT
+		jz	_tk5
+		bic.b	#PB_LEFT
+		mov	#C_PB_LEFT, R14		// R14 - num KEY = 4	
+		call	#SetChangeMEMORY	// set ChangeMemory_B	
+		jmp	ScriptKBD
+	_tk5:	
+		ret
+//==============
+ScriptKBD  					// R14 - num KEY	
+		mov	#Block_TextTask, R12
+DECODE_COM_K		
+		cmp.b	#'K', 0(R12)
+		jne	Next_COMMAND_K
+KEY_MODE
+		call	#ConvDEC_BIN		// n Digit
+		cmp.b	R13, R14
+		jne	Next_COMMAND_K
+		call	#DECODE_COM		// decode ALL COMMAND
+Next_COMMAND_K
+		call	#FndNextCOMMAND         // Z=NEXT! (R9, R10, R11, R12, R13)
+		jeq	DECODE_COM_K		
+		ret
+*/		
+//===================================================================================
+//===================================================================================
+DECODE_COM		
+//===================================		
+		cmp.b	#'I', 0(R12)
+		jeq	IF_MODE
+		cmp.b	#'E', 0(R12)
+		jeq	ELSE_MODE
+//===================================		
+		bit.b   #FALSE_B, &IF_STACK		// inverse flag
+		jnz     _false__                        // false...
+		
+#ifdef	__LCD_PRESENT__
+	bit	#st_LCD_B, &st_Periperal
+	jz      _end_lcd_com_		// no LCD detect!
+	bit	#LCD_active_B
+	jz      _end_lcd_com_		// LCD sleep...
+
+		cmp.b	#'M', 0(R12)
+		jeq	MENU_MODE  		//=M=
+DECODE_MENU		
+		cmp.b	#'T', 0(R12)
+		jeq	TEXT_MODE    		//=T=
+		cmp.b	#'P', 0(R12)
+		jeq	PRINT_REG  		//=P=
+		cmp.b	#'C', 0(R12)
+		jeq	COMMAND_MODE 		//=C=
+		cmp.b	#'G', 0(R12)
+		jeq	GRAPHICS_MODE		//=G=
+_end_lcd_com_		
+#endif
+		cmp.b	#'W', 0(R12)
+		jeq	MEMORY_WR_ 		//=W=
+#ifndef	__NO_RF__
+		cmp.b	#'N', 0(R12)
+		jeq	NWK_MODE
+#endif
+_false__	ret
+//==============================================================================
+// #define FALSE_B  BIT0 	// 1 - False, 0 - True
+//===================================		
+IF_MODE	
+		cmp.b	#'F', 1(R12)
+		jne	_false__
+		inc	R12
+		rla.b   &IF_STACK                       // define flag
+		bit.b   #PREV_FALSE_B, &IF_STACK	// 1 - False, 0 - True
+		jz      MEMORY_WR_ 			// for test
+		bis.b   #FALSE_B, &IF_STACK		// 1 - False
+		jmp	_false__                        // false...
+ELSE_MODE
+		cmp.b	#'L', 1(R12)
+		jne	END_MODE
+		bit.b   #PREV_FALSE_B, &IF_STACK	// 1 - False, 0 - True
+		jnz	_inc_TRUE
+		xor.b   #FALSE_B, &IF_STACK		// inverse flag
+		jmp	_inc_TRUE
+END_MODE	
+		cmp.b	#'N', 1(R12)
+		jne	_false__
+		rra.b   &IF_STACK                       // undefine flag
+		
+_inc_TRUE	inc	R12
+_exept_TRUE	setz
+		ret
+//===================================		
+#ifdef	__LCD_PRESENT__
+MENU_MODE  					//=M=
+		call	#ConvDEC_BIN 		// 3 Digit
+		cmp.b	&app_Menu_Line, R13
+		jne     Tag_no_eqval
+		cmp.b	#'T', 0(R12)
+		jeq     _decode_menu_
+		cmp.b	#'P', 0(R12)
+		jeq	_decode_menu_
+Action_Menu
+		cmp.b	#'K', 0(R12)
+		jeq	Action_key
+		cmp.b	#'x', 0(R12)
+		jeq	Action_pb_short
+		cmp.b	#'X', 0(R12)
+		jeq	Action_pb_long
+		ret
+//--------------		
+_decode_menu_		
+  #ifdef  COLOR_LCD
+ #ifdef	_16BIT_LCD_	
+                push	&Fon_text		// 16 bit
+		mov	&C_MENU_COLOR1, &Fon_text
+                call	#DECODE_MENU
+		pop	&Fon_text
+ #else
+                push.b	&Fon_text    		// 8 bit
+		mov.b	&C_MENU_COLOR1, &Fon_text   
+                call	#DECODE_MENU
+		pop.b	&Fon_text
+ #endif
+  #endif
+		ret
+		
+Tag_no_eqval		
+		cmp.b	#'T', 0(R12)
+		jeq	DECODE_MENU
+		cmp.b	#'P', 0(R12)
+		jeq	DECODE_MENU
+		ret
+//--------------		
+		
+Action_key      // PB_SHORT, PB_LONG, PB_UP, PB_DN, PB_RIGHT, PB_LEFT
+		call	#ConvDEC_BIN		// n Digit => R13
+		cmp.b	#C_PB_UP, R13
+		jne	_tst_dn
+		bit.b	#PB_UP
+		bic.b	#PB_UP
+		jnz	DECODE_COM		// decode ALL COMMAND
+_tst_dn		
+		cmp.b	#C_PB_DN, R13
+		jne	_tst_right
+		bit.b	#PB_DN
+		bic.b	#PB_DN
+		jnz	DECODE_COM		// decode ALL COMMAND
+_tst_right	
+		cmp.b	#C_PB_RIGHT, R13
+		jne	_tst_left
+		bit.b	#PB_RIGHT
+		bic.b	#PB_RIGHT
+		jnz	DECODE_COM		// decode ALL COMMAND   
+_tst_left	
+		cmp.b	#C_PB_LEFT, R13
+		jne	_false__
+		bit.b	#PB_LEFT
+		bic.b	#PB_LEFT
+		jnz	DECODE_COM		// decode ALL COMMAND
+		ret
+Action_pb_short		
+		inc	R12
+		bit.b	#PB_SHORT
+		bic.b	#PB_SHORT
+		jnz	DECODE_MENU
+		ret
+Action_pb_long		
+		inc	R12
+		bit.b	#PB_LONG
+		bic.b	#PB_LONG
+		jnz	DECODE_MENU
+		ret
+//===================================		
+COMMAND_MODE                         		//=C=
+		cmp.b	#'A', 1(R12)
+		jne	nxt_COM
+#ifdef	COLOR_LCD
+		add	#1, R12
+		call	#ConvDEC_BIN 		// 3 Digit
+ #ifdef	_16BIT_LCD_	
+		mov	R13, &Fon_text	        // color fon 16bit
+ #else
+		mov.b	R13, &Fon_text	        // color fon  8bit
+ #endif
+#endif
+		push	R12
+		call	#ClrLcdScript
+		pop	R12
+		jmp	_exept_TRUE
+	nxt_COM:
+		cmp.b	#'L', 1(R12)
+		jne	_Ex___
+		push	R12
+	//	call	#ClrLineEnd
+		pop	R12
+		jmp	_exept_TRUE
+//===================================		
+GRAPHICS_MODE            			//=G=
+		cmp.b	#'1', 1(R12)		// BMP mode
+		jeq	_BMP_Mode
+#ifdef	COLOR_LCD
+		cmp.b	#'F', 1(R12)		// set COLOR
+		jeq	_FILL_RECT
+		cmp.b	#'C', 1(R12)		// set COLOR
+		jeq	_SET_COLOR
+		ret
+//==============		
+_FILL_RECT      add	#1, R12
+		call	#ConvDEC_BIN 		// 3 Digit
+		mov	R13, R5		// x1
+		cmp.b	#',', 0(R12)
+		jne	_Ex___
+		call	#ConvDEC_BIN 		// 3 Digit
+		mov	R13, R6		// y1
+		cmp.b	#',', 0(R12)
+		jne	_Ex___
+		call	#ConvDEC_BIN 		// 3 Digit
+		mov	R13, R7		// x2
+		cmp.b	#',', 0(R12)
+		jne	_Ex___
+		call	#ConvDEC_BIN 		// 3 Digit
+		mov	R13, R14	// y2
+		cmp.b	#',', 0(R12)
+		jne	_Ex___
+		call	#ConvDEC_BIN 		// 3 Digit
+		mov	R14, R8		// y2, R13 - color
+ #ifdef	_16BIT_LCD_	
+ 		call	#ConvColor_332_565	// R13 - 332color => R13 - 565color
+ #endif
+		mov	R13, R9		// color
+		call	#Fill_Rect_Lcd  // Fill_Rect_Lcd
+		jmp	_exept_TRUE
+//==============		
+_SET_COLOR	add	#1, R12
+		call	#ConvDEC_BIN 		// 3 Digit
+ #ifdef	_16BIT_LCD_	
+ 		call	#ConvColor_332_565	// R13 - 332color => R13 - 565color
+		mov	R13, &Color_text	// 16 bit color
+ #else
+		mov.b	R13, &Color_text	//  8 bit color
+ #endif
+		cmp.b	#',', 0(R12)
+		jne	_Ex___
+		call	#ConvDEC_BIN 		// 3 Digit
+ #ifdef	_16BIT_LCD_	
+ 		call	#ConvColor_332_565	// R13 - 332color => R13 - 565color
+		mov	R13, &Fon_text	        // color fon 16bit
+ #else
+		mov.b	R13, &Fon_text	        // color fon  8bit
+ #endif
+		jmp	_exept_TRUE
+#else
+		ret
+#endif
+//==============		
+_BMP_Mode       push	R12
+		call	#LogoToLCD		// 16mS		
+		pop	R12
+		jmp	_inc_TRUE
+//===================================		
+TEXT_MODE                   			//=T=
+		bic	#TextSize_mask, &StatusLCD
+		push	R12
+		mov.b	1(R12), R12
+		and.b	#0x0F, R12
+		tst.b	R12
+		jz      TMX
+		dec.b   R12
+		and.b	#0x07, R12
+		bis.b	R12, &StatusLCD+1
+	TMX:	pop	R12
+		
+		cmp.b	#'y', 2(R12)
+		jne	_Ex___
+		add	#2, R12
+		call	#ConvDEC_BIN 		// 3 Digit
+		mov.b	R13, &PageAddress	; Page Address
+		cmp.b	#'x', 0(R12)
+		jne	_Ex___
+		call	#ConvDEC_BIN 		// 3 Digit
+		mov.b	R13, &ColumnAddress
+//======================		
+NEXT_		cmp.b	#':', 0(R12)
+		jne	_exept_TRUE
+		inc	R12
+STRING_LCD	call	#StringToLCD		; string to LCD
+		dec	R12		// !!!!! decd 
+		jmp	_exept_TRUE
+#endif		
+//==============================================================================
+#ifndef	__NO_RF__
+NWK_MODE		                       	// =N=
+		cmp.b	#'#', 1(R12)
+		jeq	CNST_NWK_MODE
+		call	#ConvDEC_BIN		// Addr
+		mov	R13, R5                 // R5-Addr
+		cmp.b	#'b', 0(R12)
+		jne	_ERR_SCR_I
+		call	#Ld_MB_com              // ptr R12 => R4-BlockID, R14-OffSet, R15-Nbyte
+		jne	_ERR_SCR_I
+		cmp.b	#'>', 0(R12)
+		jne	_ERR_SCR_I
+		mov	R12, R7  		// R7 = ptr '>'
+		clr	R12                     // size DATA
+		call	#MakeNWKcommand		// set MyAddr ...,R12=sizeDATA => R13-index, R12-ptr	
+		jnz	_mf_            	// memory full!!!
+		mov	#ID_NwkFrameField+ID_AppField+ID_ReadField+PROF_SCRIPT, NWK_FCF(R12) // +0 PROFILE 14
+		mov	R7, NWK_SnFrame(R12)	// SN frame = ptr '>'
+                call	#INI_NWK_APP
+		mov.b	#Exp_IN_PROGRESS, &app_ScriptStatus 	// IN PROGRESS!!!
+_ex_nwk		mov	R7, R12
+		jmp	_exept_TRUE
+//=============
+_mf_           	call	#_ERR_SCR_M_FULL
+		jmp	_ex_nwk	
+//=============
+CNST_NWK_MODE    				// =N#=
+		inc	R12
+		call	#ConvDEC_BIN		// R13=#Cnst
+		cmp.b	#'>', 0(R12)
+		jne	_ERR_SCR_PTR          	// error SCRIPT!!!
+		mov	R13, &TemporaryDWord+0  // R13=#Cnst
+                clr	&TemporaryDWord+2	
+		mov	#TemporaryDWord, R6	// ptr data
+                jmp	PART_II
+//======================	
+RETURN_NWK_MODE		//  --> R13-index, R12-ptr NWK, R14- NWK_FCF
+		mov	R12, R6         	// -ptr NWK
+		mov	NWK_SnFrame(R12), R12	// +6   SN frame => ptr
+		cmp.b	#'>', 0(R12)
+		jne	_ERR_SCR_PTR          	// error SCRIPT!!!
+PART_II_TRANSFER
+		add	#NWK_lenCommand, R6     // ptr data
+		call	#TEST_Route_01       	// R14- NWK_FCF, ROUTE_01? => Z=Ok
+		jne     PART_II
+		add	#NWK_lenRouteFrame_01, R6 // add len ROUTE_01 to ptr data
+PART_II		
+		call	#ConvDEC_BIN		// n Digit
+		mov	R13, R5			// Addr dst
+		call	#Ld_MB_com              // ptr R12 => R4-BlockID, R14-OffSet, R15-Nbyte
+		jnz	_ERR_SCR_II          	// error SCRIPT!!!
+		
+		mov.b	R15, R12                // Nbyte size DATA
+		call	#MakeNWKcommand		// set MyAddr ...,R12=sizeDATA => R13-index, R12-ptr	
+		jnz	_ERR_SCR_M_FULL         // memory full!!!  exit
+		mov	#ID_NwkFrameField+ID_AppField+ID_WriteField+PROF_0, NWK_FCF(R12) // Profile 0 for no respond!! Respond sflush!
+		mov	#0, NWK_SnFrame(R12)	// +6   SN frame = 0
+                call	#INI_NWK_APP
+		
+		mov.b	#Exp_SUCCESS, &app_ScriptStatus 	// OK!
+		add	#NWK_lenCommand, R12	// dst
+		mov	R6, R13			// src, ptr DATA incoming pack
+		mov.b	R15, R14                // len
+               	br	#memcpy_          	// dst - R12, src - R13,  length - R14
+//======================		
+TEST_Route_01			// ROUTE_01?	
+		push	R14	
+		and	#ID_RouteField , R14    // R14- NWK_FCF
+		cmp	#ID_Route_01, R14       // ROUTE_01?
+		pop	R14
+		ret
+//======================		
+_ERR_SCR_M_FULL	mov.b	#Exp_MEMORY_FULL, R12
+		jmp	set_exp
+_ERR_SCR_I	mov.b	#Exp_SCR_PART_I_ERR, R12
+		jmp	set_exp
+_ERR_SCR_II	mov.b	#Exp_SCR_PART_II_ERR, R12
+		jmp	set_exp
+_ERR_SCR_PTR	mov.b	#Exp_SCR_RETURN_PTR_ERR, R12
+       set_exp:	mov.b	R12, &app_ScriptStatus
+_Ex___		ret
+//======================		
+INI_NWK_APP
+		tst	R5
+		jnz     _set_dst_
+		mov	&cfg_MyAddr, R5
+_set_dst_	mov	R5, NWK_dstAddr(R12)	// +2
+		mov.b	R4, NWK_FileID(R12)	// +8
+		mov.b	R14, NWK_OffSetLo(R12) 	// +10
+		swpb	R14
+		mov.b	R14, NWK_OffSetHi(R12) 	// +9 
+		mov.b	R15, NWK_Nbyte(R12)	// +11
+               	mov     #MAX_WAIT_DATA_RESPONCE, &TmrAPP // NEW !!!! не дает себе уснуть!!!
+		push	R12
+                call	#Set_descr_APP_NWK 	// discriptor APP_NWK ... (R12)
+		pop	R12
+		ret
+#else		
+_Ex___		ret
+#endif		
+//==============================================================================
+#ifdef	__LCD_PRESENT__
+PRINT_REG	                                // =P=
+		call	#Ld_MB_com              // ptr R12 => R4-BlockID, R14-OffSet, R15-Nbyte
+		bic	#Sign_B|scr_div10_B|scr_div100_B, &Status01      // clr sign!!!
+_nxt_prn	cmp.b	#'d', 0(R12)		
+		jeq	scr_DEC                 // --DEC--
+		cmp.b	#'h', 0(R12)
+		jeq	scr_HEX                 // --HEX--
+		cmp.b	#'/', 0(R12)
+		jne	_Ex___                  // --DIV--
+//======================		
+scr_DIV
+		call	#ConvDEC_BIN		
+		cmp.b	#10, R13                 // value  10
+		jne     _tst100
+		bis	#scr_div10_B, &Status01 // scr_div10_B
+                jmp	_nxt_prn
+_tst100
+		cmp.b	#100, R13                 // value  100
+		jne     _nxt_prn
+		bis	#scr_div100_B, &Status01 // scr_div100_B
+                jmp	_nxt_prn
+		
+DEC_DIV		// divide 10 or 100?		
+		bit	#scr_div10_B|scr_div100_B, &Status01    
+		jz	_ex_scr_div	// no divide
+		bit	#scr_div10_B, &Status01
+		jnz	_div_10_
+_div_100_	rra	R14
+		rrc	R13
+		rrc	R12
+		rra	R14
+		rrc	R13
+		rrc	R12
+		rra	R14
+		rrc	R13
+		rrc	R12
+		rra	R14
+		rrc	R13
+		rrc	R12
+_div_10_	rra	R14
+		rrc	R13
+		rrc	R12
+		rra	R14
+		rrc	R13
+		rrc	R12
+		rra	R14
+		rrc	R13
+		rrc	R12
+		rra	R14
+		rrc	R13
+		rrc	R12
+_ex_scr_div
+		ret
+//======================		
+scr_DEC		
+		call	#ConvDEC_BIN		// d Pointer
+		mov.b	R13, R5                 // pointer DEC --> low R5
+		cmp.b	#'k', 0(R12)
+		jne	_Ex___
+		call	#ConvDEC_BIN		// k Digit
+		swpb	R13
+		bis	R13, R5                 // N digits --> high R5
+Reg_To_LCD_DEC:		
+		call	#TstAddrAccess		// R11 - tupe memory -> R15=SizeBlocl, R7=StartAddrBlock, R8=Address, R9=Nbyte
+		jnz	_Ex___                  // Error!!!
+  #ifdef EXT_SPI_RAM                      	// External SPI RAM
+		cmp.b	#EXT_RAM, R11           // ram write?
+		jne	L_xx
+		call	#RdDwordSRAM
+  #endif
+L_xx		push	R12
+		mov	R8, R12	
+		cmp	#1, R9
+		jeq	L_1b
+		cmp	#2, R9
+		jeq	L_2b
+L_4b		call	#Hex2bcd32		// bin-@12 --> bcd-R14, R13, R12
+		call	#DEC_DIV		// divide 10 or 100?	
+L_4c		call	#ConvHEXtoLCD10		// R14,R13,R12 - BCD, R5 - N.Point
+		jmp	L_ex
+L_2b		call	#Hex2bcd16		// bin-@12 --> bcd-R13, R12
+		call	#DEC_DIV		// divide 10 or 100?	
+L_2c		call	#ConvHEXtoLCD10		// R14,R13,R12 - BCD, R5 - N.Point
+		jmp	L_ex
+L_1b		call	#Hex2bcd8		// bin-@12 --> bcd-R12
+		call	#DEC_DIV		// divide 10 or 100?	
+L_1c		call	#ConvHEXtoLCD10		// R14,R13,R12 - BCD, R5 - N.Point
+L_ex		pop	R12
+NEXT_2
+		cmp.b	#':', 0(R12)
+		jne	_exept_TRUE
+		inc	R12
+		
+		//  cmp.b	#' ', 0(R12)  	// если 2 пробела - то смена фона на дефолт!!! NEW!!!
+		//  jne     STRING_LCD
+		//  cmp.b	#' ', 1(R12)
+		//  jne     STRING_LCD
+#ifdef	COLOR_LCD
+		  mov   &C_TEXT_FON_COLOR, &Fon_text
+#endif		  
+		jmp     STRING_LCD
+//======================		
+scr_HEX:	
+		inc	R12
+Reg_To_LCD_HEX		
+		mov.b   #'0', R9
+	        call	#SUMB_TO_LCD
+		mov.b   #'x', R9
+	        call	#SUMB_TO_LCD
+		call	#TstAddrAccess		// -> R11 - tupe memory, R15=SizeBlocl, R7=StartAddrBlock, R8=Address, R9=Nbyte
+		jnz	_Ex___                  // Error!!!
+		cmp.b	#EXT_RAM, R11           // ram write?
+		jne	L_xxh
+  #ifdef EXT_SPI_RAM                      	// External SPI RAM
+		call	#RdDwordSRAM
+  #else		
+		ret                   		// Error!!!
+  #endif
+L_xxh		push	R12
+		cmp	#1, R9
+		jeq	L_1bh
+		cmp	#2, R9
+		jeq	L_2bh
+L_4bh		mov	@R8+, R12
+		mov	@R8, R13
+		mov	#0x0800, R5
+		jmp	L_4c
+L_2bh		mov	@R8, R12
+		mov	#0x0400, R5
+		jmp	L_2c
+L_1bh		mov.b	@R8, R12
+		mov	#0x0200, R5
+		jmp	L_1c
+//======================		
+  #ifdef EXT_SPI_RAM                      	// External SPI RAM
+RdDwordSRAM		
+		mov	#TemporaryDWord, R7
+		push	R9
+		call	#SRAM_RD      		// Read @R8 -> @R7 N=R9
+		pop	R9
+		mov	#TemporaryDWord, R8
+		ret
+  #endif
+#endif
+//==============================================================================
+_TEST_IF
+	_and:	cmp.b	#'&', R5
+		jne     _eq
+		and	R13, R12		// - & -
+		jz	_false_if
+		jmp     _true_if
+		
+	_eq:	cmp.b	#'=', R5
+		jne     _lo
+		cmp	R13, R12		// - = -
+		jne     _false_if
+		jmp     _true_if
+		
+	_lo:	cmp.b	#'<', R5
+		jne     _hi
+		cmp	R13, R12		// - < -
+		jhs     _false_if
+		jmp     _true_if
+		
+	_hi:	cmp.b	#'>', R5
+		jne     ex_k
+		cmp	R13, R12		// - > -
+		jhs     _true_if
+_false_if
+		bis.b   #FALSE_B, &IF_STACK		// false
+		jmp	ex_k
+_true_if
+		bic.b   #FALSE_B, &IF_STACK		// true
+		jmp	ex_k
+//===============
+MEMORY_WR_                                      //=W=
+		call	#Ld_MB_com		// ptr R12 => R4-BlockID, R14-OffSet, R15-Nbyte
+		mov.b	@R12, R5                // c,s,x,w,a, &,<,>,=, --> R5
+		cmp.b	#'R', 1(R12)
+		jne	_value
+	_reg:
+		mov	&app_RegOperand, R13
+		jmp	_end_operand
+	_value:	
+		call	#ConvDEC_BIN		// 5 Digit , R13 - bin operand
+  _end_operand:		
+		call	#TstAddrAccess          // R11 - tupe memory -> R15=SizeBlocl, R7=StartAddrBlock, R8=Address, R9=Nbyte
+		jnz	_Ex___        		// Error!!!
+		push	R12
+#ifdef EXT_SPI_RAM                      	// External SPI RAM
+		cmp.b	#EXT_RAM, R11           // ram write?
+		jne	_no_sram
+		mov	R8, R12
+       		call	#SRAM_RD16     		// R12-Addr --> R12-value
+		jmp	_bic                    // no test parity address
+#endif
+_no_sram	cmp	#1, R9 			// R9 - cnt
+		jne     _word
+	_byte:	mov.b	@R8, R12		// for byte access
+		mov.b	R13, R13            	// for byte access
+		jmp	_bic
+	_word:  mov	#2, R9                  // R9 - cnt
+		mov	@R8, R12                // for word access
+	        //--------------
+	_bic:	cmp.b	#'c', R5
+		jne     _bis
+		bic	R13, R12		// - bic -
+		jmp     _ok_xx
+	_bis:	cmp.b	#'s', R5
+		jne     _xor
+		bis	R13, R12		// - bis -
+		jmp     _ok_xx
+	_xor:	cmp.b	#'x', R5
+		jne     _wr
+		xor	R13, R12		// - xor -
+		jmp     _ok_xx
+	_wr:	cmp.b	#'w', R5
+		jne     _add
+		mov	R13, R12		// - wr -
+		jmp     _ok_xx
+	_add:	cmp.b	#'a', R5
+		jne     _TEST_IF                // test if conditions
+		cmp	#1, R9 			// R9 - cnt
+		jne	_addw
+		add.b	R13, R12		// - add - byte
+		jmp	_ok_xx
+	_addw:	add	R13, R12		// - add - word
+	_ok_xx:
+	
+		call	#SetChangeMEMORY	// set ChangeMemory_B	
+		mov	R12, &TemporaryWord
+		mov	#TemporaryWord, R7
+		tst	R11
+		jeq	_fl_w
+		cmp.b	#MEM_RAM, R11           // ram write?
+		jeq	_ram_w
+#ifdef EXT_SPI_RAM                      	// External SPI RAM
+		cmp.b	#EXT_RAM, R11           // ram write?
+		jne	ex_k
+       _sram_w:	call	#SRAM_WR       		// Write @R7 -> @R8 N=R9
+#endif
+	ex_k:	pop	R12
+_ex_TRUE	setz
+		ret
+		
+	_fl_w:	call	#FR_WRITE	// write @R7 -> @R8 N=R9
+		jmp	ex_k
+		
+	_ram_w:	cmp.b	#1, R9                  // byte write?
+		jne     _w_w
+		mov.b	R12, 0(R8)		// byte write
+		jmp	ex_k
+	_w_w:	mov	R12, 0(R8)              // word write
+		jmp	ex_k
+//======================
+TstAddrAccess					// R11 - tupe memory -> R15=SizeBlocl, R7=StartAddrBlock, R8=Address, R9=Nbyte
+		mov	R4, R7
+		mov	R14, R8
+		mov	R15, R9
+		call	#BlockToRealAddr       	// R7=BlockID, R8=OffSet, R9=Nbyte,
+		jnz	_Ex___ 			; error if not real block
+		call	#TstAddrBlock 	       // -> R15=SizeBlocl, R7=StartAddrBlock, R8=Address
+		jnz	_Ex___ 			; error if address overflow
+		swpb	R11
+                and.b	#MaskLocation, R11 	; test Location memory
+		br	#TestAccessWrAddr	; test access address to write, Ok = Z
+//==============================================================================
+FndNextCOMMAND          // Z=NEXT! (R9, R10, R11, R12, R13)
+		mov	#Block_TextTask+SizeBlock_TextTask, R11
+		mov.b	#END_TEXT, R10
+		mov.b	#LF, R9
+FndNextCOM	
+		mov.b	@R12+, R13
+		cmp	R11, R12
+		jhs	__end__
+		cmp.b	R10, R13
+		jeq	__end__
+		cmp.b	R9, R13
+		jne	FndNextCOM
+		ret
+		
+__end__		clrz
+		ret
+//******************************
+Ld_MB_com		// ptr R12 => R4-BlockID, R14-OffSet, R15-Nbyte
+		call	#ConvDEC_BIN		// 3 Digit
+		mov	R13, R4                 // BlockID --> low R4
+		cmp.b	#'s', 0(R12)
+		jne	__end__
+		call	#ConvDEC_BIN		// 5 Digit
+		mov	R13, R14                 // OffSet  --> R14
+		cmp.b	#'n', 0(R12)
+		jne	__end__
+		call	#ConvDEC_BIN		// 1 Digit
+		mov	R13, R15                // Nbyte --> R15
+		setz
+		ret
+//======================		
+ConvDEC_BIN     // => R13
+		inc	R12
+ConvDecBin16		
+		push	R14
+		clr	R14
+		clr	R13
+_tst_n_ch		
+		cmp.b	#'0', 0(R12)
+		jlo     _tst_n_
+		cmp.b	#':', 0(R12)		
+		jhs     _tst_n_
+		inc	R14
+		inc	R12
+		jmp	_tst_n_ch
+_tst_n_		
+		tst	R14
+		jz	_er_no_ch
+		push	R12
+		dec	R12
+		
+		mov	#1, R10	        	// *1
+		call	#cnv_tetr
+		jz      _end_cnv
+		mov	#10, R10	        // *10
+		call	#cnv_tetr
+		jz      _end_cnv
+		mov	#100, R10	    	// *100
+		call	#cnv_tetr
+		jz      _end_cnv
+		mov	#1000, R10	    	// *1000
+		call	#cnv_tetr
+		jz      _end_cnv
+		mov	#10000, R10	    	// *10000
+		call	#cnv_tetr
+_end_cnv
+		pop	R12
+_er_no_ch
+                pop	R14
+		ret
+//======================		
+cnv_tetr		
+		mov.b   @R12, R11
+		and.b	#0x0F, R11
+		dec	R12
+		call	#MUL16S_   		//R11*R10=R8.R9 signed mul - 150 cycles
+		add	R9, R13
+		dec	R14
+		ret
+//==============================================================================
+#ifdef	__LCD_PRESENT__          
+lenght_Sign = 5
+ConvHEXtoLCD10:					// R14,R13,R12 - BCD, R5 - N.Point
+		mov.b	R5, R8			// point XXXXX.xxx
+		bit	#Sign_B, &Status01
+		jz     	x10tet_conv
+       //         sub.b   #lenght_Sign, &ColumnAddress
+		mov.b   #'-', R9		// Sign
+	        call	#SUMB_TO_LCD
+x10tet_conv:	
+		mov	#10, R10
+x_conv:
+                mov     R8, R7
+                inc     R7
+
+		swpb	R5			// N digit to LCD
+		tst.b	R5
+		jz	xtet_conv
+
+		mov.b	R10, R11
+		sub.b	R5, R11
+		jz	xtet_conv
+		jlo	xtet_conv
+		sub.b	R11, R10
+		rla.b	R11
+		rla.b	R11		// *4
+   loop_x_c:	
+		rla	R12
+		rlc	R13
+		rlc.b	R14
+                dec	R11
+		jnz	loop_x_c
+
+xtet_conv:
+		cmp	R10, R8
+		jne     npnp
+		mov.b   #'.', R9
+	        call	#SUMB_TO_LCD
+	npnp:
+		mov	#BITC, R9
+	loopRla:	
+		rla	R12
+		rlc	R13
+		rlc.b	R14
+		rlc	R9
+		jnc	loopRla
+                jnz     convChar        // 0?
+                tst.b   R5              // cut zero? high R5 = 0
+                jnz     convChar        // no
+		cmp	R10, R7         // end zero cut?
+                jlo     nxtSmb
+       convChar:
+                bis     #0x00FF, R5     // cut zero off
+		add.b	#'0', R9        // convert BIN to CHAR
+		cmp.b	#':', R9
+		jlo     wrSmb
+		add.b	#'A'-':', R9
+	wrSmb:	
+	        call	#SUMB_TO_LCD
+        nxtSmb:
+		dec	R10
+		jnz	xtet_conv
+		swpb	R5		// restore R5
+		ret
+		
+//==============================================================================
+//==============================================================================
+Hex2bcd8:		// bin-@12 --> bcd-R12
+		mov	#8, R9
+		mov.b	@R12+, R11
+		swpb	R11
+		bit	#BITF, R11
+		jz	ToBcd
+		inv	R11
+		add	#0x100, R11
+                jmp	ToBcdSign
+Hex2bcd16:		// bin-@12 --> bcd-R13, R12
+		mov	#16, R9
+		mov	@R12+, R11
+		bit	#BITF, R11
+		jz	ToBcd
+		inv	R11
+		inc	R11
+                jmp	ToBcdSign
+Hex2bcd32:		// bin-@12 --> bcd-R14, R13, R12
+		mov	#32, R9
+		mov	@R12+, R10
+		mov	@R12+, R11
+		bit	#BITF, R11
+		jz	ToBcd
+		inv	R10
+		inv	R11
+		inc	R10
+		adc	R11
+	ToBcdSign:	
+		bis	#Sign_B, &Status01     // set sign!!!
+	ToBcd:	
+		clr	R12
+		clr	R13
+		clr	R14
+  L$1:
+  		rla	R10
+		rlc	R11
+		dadd	R12, R12
+		dadd	R13, R13
+		dadd	R14, R14
+		dec	R9
+		jnz	L$1
+		ret
+//==============================================================================
+#endif

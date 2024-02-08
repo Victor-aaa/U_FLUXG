@@ -1,0 +1,92 @@
+//==============================================================================
+// 		FR UTILS									
+//==============================================================================
+/*   OperateSeg:
+  		call	#TestVccVALID		// test VCC VALID?
+   		cmp	#RESET_VEC, R13        	// Programm code write protect!!!
+		jlo     OperSeg
+   		cmp	#END_PROGRAMM_CODE, R13
+		jlo     _ex_fr_wr
+		cmp	#0xFE00, R13		// SFB segment Interrupt Vectors (0xFE00)
+	//	cmp	#SFB(INTVEC), R13	// SFB start segment Interrupt Vectors (0xFFE0)
+		jhs	_ex_fr_wr
+OperSeg
+		ret
+*/		
+//==============		
+//FLASH_ERASE_SEG
+FR_ERASE	// R7=0xFF -> @R8 N=R9
+		mov	#0xFFFF, R7		
+FR_FILL         // R7= val fill
+     		mov   	#FRWPPW, SYSCFG0
+_l_fr_er	mov.b	R7, 0(R8)
+		inc	R8
+		dec	R9
+		jnz	_l_fr_er
+		jmp	_ex_fr_wr
+//==============		
+//FLASH_WRITE_SEG
+FR_WRITE	// write @R7 -> @R8 N=R9
+		tst	R9
+		jz	_ex_fr
+     		mov   	#FRWPPW, SYSCFG0
+		bit	#BIT0, R9
+		jnz	_l_fr_b
+                bit	#BIT0, R7
+		jnz      _l_fr_b
+                bit	#BIT0, R8
+		jnz      _l_fr_b
+_l_fr_w		mov	@R7+, 0(R8)
+		incd	R8
+		decd	R9
+		jnz	_l_fr_w
+_ex_fr_wr	mov    	#FRWPPW+DFWP+PFWP, SYSCFG0
+_ex_fr		ret
+		
+_l_fr_b		mov.b	@R7+, 0(R8)
+		inc	R8
+		dec	R9
+		jnz	_l_fr_b
+		jmp	_ex_fr_wr
+//==============================================================================
+//==============================================================================
+Write_Seg	// write @R12 -> @R13 N=R14
+		tst	R14
+		jz	_ex_fr
+		mov   	#FRWPPW, SYSCFG0
+                bit	#BIT0, R14
+		jnz     loopWr_SegB
+                bit	#BIT0, R13
+		jnz     loopWr_SegB
+                bit	#BIT0, R12
+		jnz     loopWr_SegB
+loopWr_SegW
+    		mov	@R12+, 0(R13)
+		incd	R13
+		decd	R14
+		jnz	loopWr_SegW
+		jmp	_ex_fr_wr
+
+loopWr_SegB
+    		mov.b	@R12+, 0(R13)
+		inc	R13
+		dec	R14
+		jnz	loopWr_SegB
+		jmp 	_ex_fr_wr
+//==============================================================================
+Erase_Seg 	// Erase Segment 0xFFFF -> @R13 N=R14 = SizeSeg
+		push	R14
+		mov	#SizeSeg-1, R14
+		bic	R14, R13
+		inc	R14
+		mov   	#FRWPPW, SYSCFG0
+loopEr_SegW
+    		mov	#0xFFFF, 0(R13)
+		incd	R13
+		decd	R14
+		jnz	loopEr_SegW
+		pop	R14
+		jmp	_ex_fr_wr
+//==============================================================================
+
+
